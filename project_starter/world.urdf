@@ -1,0 +1,68 @@
+<?xml version="1.0" ?>
+
+<world name="demo_world" gravity="0.0 0.0 -9.81">
+
+	<robot name="PANDA">
+		<model dir="${BASKETBOT_URDF_FOLDER}/panda" path="panda_arm_box.urdf" name="panda" />
+	</robot>
+
+	<static_object name="Floor">
+		<origin xyz="0.0 0.0 -0.05" rpy="0 0 0" />
+		<visual>
+			<origin xyz="0.0 0.0 0.0" rpy="0 0 0" />
+			<geometry>
+				<box size="5.0 5.0 0.1" />
+			</geometry>
+			<material name="material_blue">
+				<color rgba="0.0 0.1 0.5 1.0" />
+			</material>
+		</visual>
+		<collision>
+			<origin xyz="0.0 0.0 0.0" rpy="0 0 0" />
+			<geometry>
+				<box size="5.0 5.0 0.1" />
+			</geometry>
+		</collision>
+	</static_object>
+
+	<dynamic_object name="sphere">
+		<origin xyz="0.5 0.0 1.0" rpy="0 0 0" />
+		<visual>
+			<origin xyz="0 0 0" rpy="0 0 0" />
+			<geometry>
+				<sphere radius="0.05" />
+			</geometry>
+			<material name="material_orange">
+				<color rgba="1.0 0.5 0.0 1.0" />
+			</material>
+		</visual>
+		<collision>
+			<origin xyz="0 0 0" rpy="0 0 0" />
+			<geometry>
+				<sphere radius="0.05" />
+			</geometry>
+		</collision>
+		<mass value="0.6" />
+		<inertial>
+        <mass value="0.6" />
+        <inertia ixx="0.0012" iyy="0.0012" izz="0.0012" ixy="0.0" ixz="0.0" iyz="0.0" />
+		</inertial>
+	</dynamic_object>
+
+	<light name="light1" type="directional">
+		<position xyz="2.0 -2.0 2.0" />
+		<lookat xyz="0.0 0.0 0.0" />
+	</light>
+
+	<light name="light2" type="directional">
+		<position xyz="2.0 2.0 2.0" />
+		<lookat xyz="0.0 0.0 0.0" />
+	</light>
+
+	<camera name="camera_fixed">
+		<position xyz="1.5 1.0 1.0" />
+		<vertical xyz="0.0 0.0 1.0" />
+		<lookat xyz="0.0 0.0 0.4" />
+	</camera>
+
+</world>
