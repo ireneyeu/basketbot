@@ -5,6 +5,7 @@ mkdir bin build
 
 Then inside build need to compile:
 cd build
+
 cmake .. && make -j4
 
 Then you can run the files from bin folder:
