@@ -142,7 +142,7 @@ int main(int argc, char** argv) {
             MatrixXd Kp = 400.0*MatrixXd::Identity(dof,dof);
             Kp(dof - 1, dof - 1) = 50.0;
             MatrixXd Kv = 50.0*MatrixXd::Identity(dof,dof);
-            Kv(dof - 1, dof - 1) = -0.168;// if  simviz uses 0.1 Kv7 = -0.168; simviz 1.0 -> Kv7 = -0.09
+            Kv(dof - 1, dof - 1) = -0.167;// if  simviz uses 0.1 Kv7 = -0.168; simviz 1.0 -> Kv7 = -0.09
 
 
             cout<< robot_q(6) << endl;
@@ -180,7 +180,7 @@ int main(int argc, char** argv) {
 
             // Part D
             N = robot->nullspaceMatrix(Jv);
-            Kv = 10.0* MatrixXd::Identity(dof,dof);
+            Kv = 25.0* MatrixXd::Identity(dof,dof);
             control_torques = Jv.transpose()*F + robot->jointGravityVector() - N.transpose() * robot->M() * (Kv * (robot_dq));
         }
 
@@ -207,7 +207,7 @@ int main(int argc, char** argv) {
             F = Lambda*(-kp*(ee_x - ee_xdesired) - kv*(ee_v)) + p;
 
             N = robot->nullspaceMatrix(Jv);
-            MatrixXd Kv = 10.0* MatrixXd::Identity(dof,dof);
+            MatrixXd Kv = 25.0* MatrixXd::Identity(dof,dof);
             control_torques = Jv.transpose()*F - N.transpose() * robot->M() * (Kv * (robot_dq));
 
 
@@ -217,7 +217,6 @@ int main(int argc, char** argv) {
 
         // ---------------------------  question 4 ---------------------------------------
         else if(controller_number == 4) {
-
             Vector3d ee_x;
             ee_x = robot->position(link_name, pos_in_link);
             Vector3d ee_xdesired;
@@ -234,40 +233,42 @@ int main(int argc, char** argv) {
             p = J_bar.transpose() * robot->jointGravityVector();
 
             MatrixXd F = MatrixXd::Zero(3,1);
-            float kp = 800.0;
-            float kv = 30.0; 
+            float kp = 200.0;
+            float kv = 27.0; 
             F = Lambda*(-kp*(ee_x - ee_xdesired) - kv*(ee_v)) + p;
 
             N = robot->nullspaceMatrix(Jv);
-            MatrixXd Kv = 50.0* MatrixXd::Identity(dof,dof);
+            MatrixXd Kv = 25.0* MatrixXd::Identity(dof,dof);
 
             // Part i.
+            control_torques = Jv.transpose()*F - N.transpose() * robot->M() * (Kv * (robot_dq));
+
+            // Part ii.
+            Lambda = MatrixXd::Identity(3,3);
+            F = Lambda*(-kp*(ee_x - ee_xdesired) - kv*(ee_v)) + p;
+
+            control_torques = Jv.transpose()*F - N.transpose() * robot->M() * (Kv * (robot_dq));
+
+            // Part iii.
+            Lambda = robot->taskInertiaMatrix(Jv);
+            F = Lambda*(-kp*(ee_x - ee_xdesired) - kv*(ee_v)) + p;
             VectorXd q_desired (dof);
             q_desired << 0,0,0,0,0,0,0;
-            control_torques = Jv.transpose()*F + N.transpose() * robot->M() * (-100.0 * (robot_q - q_desired) - Kv * (robot_dq)) + robot->jointGravityVector();
+            MatrixXd KpJ = 400.0*MatrixXd::Identity(dof,dof);
+            // KpJ(1,1) = 0.01;
+            // KpJ(2,2) = 1.0;
+            // KpJ(3,3) = 0.01;
+            // KpJ(4,4) = 1.0;
+            // KpJ(5,5) = 0.01;
+            MatrixXd KvJ = 50.0*MatrixXd::Identity(dof,dof);
+            control_torques = Jv.transpose()*F + N.transpose() * robot->M() * (-KpJ * (robot_q - q_desired) - KvJ * (robot_dq));
 
-            // // Part ii.
-            // Lambda = MatrixXd::Identity(3,3);
-            // F = Lambda*(-kp*(ee_x - ee_xdesired) - kv*(ee_v)) + p;
-
-            // N = robot->nullspaceMatrix(Jv);
-            // Kv = 10.0* MatrixXd::Identity(dof,dof);
-
-            // control_torques = Jv.transpose()*F - N.transpose() * robot->M() * (Kv * (robot_dq));
-
-            // // Part iii.
-            // Lambda = robot->taskInertiaMatrix(Jv);
-            // VectorXd q_desired (dof);
-            // q_desired << 0,0,0,0,0,0,0;
-            // control_torques = Jv.transpose()*F + N.transpose() * robot->M() * (-kp * (robot_q - q_desired) - kv * (robot_dq));
-
-            // // Part iv.
-            // kp = 1.0;
-            // kv = 10.0;
-            // control_torques = Jv.transpose()*F + N.transpose() * robot->M() * (-kp * (robot_q - q_desired) - kv * (robot_dq)) + robot->jointGravityVector();
+            // Part iv.
+            control_torques = control_torques + N.transpose() * (robot->M() * (-KpJ * (robot_q - q_desired) - KvJ * (robot_dq)) + robot->jointGravityVector() );
 
 
             cout << ee_x.transpose() << endl;
+            // cout << robot_q.transpose() << endl;
 
             // control_torques.setZero();
         }

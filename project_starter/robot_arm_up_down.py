@@ -8,8 +8,8 @@ class State(Enum):
     GOING_DOWN = auto()
 
 
-goal_position_redis_key = "opensai::controllers::PANDA::cartesian_controller::motion_force_task::goal_position"
-current_position_redis_key = "opensai::controllers::PANDA::cartesian_controller::motion_force_task::current_position"
+goal_position_redis_key = "sai::controllers::PANDA::cartesian_controller::motion_force_task::goal_position"
+current_position_redis_key = "sai::controllers::PANDA::cartesian_controller::motion_force_task::current_position"
 
 # redis client
 redis_client = redis.Redis()

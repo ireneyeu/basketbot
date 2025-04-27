@@ -145,12 +145,15 @@
 		</inertial>
 		<visual>
 			<geometry>
-				<box size="0.06 0.06 0.06" />
+				<box size="0.25 0.20 0.02" />
 			</geometry>
+			<material name="material_grey">
+				<color rgba="0.75 0.75 0.75 1.0" />
+			</material>
 		</visual>
 		<collision>
 			<geometry>
-				<box size="0.06 0.06 0.06" />
+				<box size="0.25 0.20 0.02" />
 			</geometry>
 		</collision>
 	</link>
@@ -218,7 +221,7 @@
 		<limit effort="12" lower="-2.8973" upper="2.8973" velocity="2.6100"/>
 	</joint>
 	<joint name="joint_ee" type="fixed">
-		<origin rpy="0 0 0" xyz="0 0 0.14"/>
+		<origin rpy="0 0 0" xyz="0.08 0 0.12"/>
 		<parent link="link7"/>
 		<child link="end-effector"/>
 	</joint>

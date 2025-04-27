@@ -1,4 +1,4 @@
-<redisConfiguration namespacePrefix="opensai" />
+<!-- <redisConfiguration namespacePrefix="opensai" /> -->
 
 <!-- 
 The <simvizConfiguration> element contains the configuration for the simulation and visualization of
