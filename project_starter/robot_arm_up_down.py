@@ -10,6 +10,8 @@ class State(Enum):
 
 goal_position_redis_key = "sai::controllers::PANDA::cartesian_controller::motion_force_task::goal_position"
 current_position_redis_key = "sai::controllers::PANDA::cartesian_controller::motion_force_task::current_position"
+ee_forces = "sai::sensors::PANDA::ft_sensor::end-effector::force"
+ee_moments = "sai::sensors::PANDA::ft_sensor::end-effector::moment"
 
 # redis client
 redis_client = redis.Redis()
@@ -19,6 +21,8 @@ state = State.GOING_UP
 
 try:
     while True:
+        print("ee_forces: ", json.loads(redis_client.get(ee_forces)))
+        print("ee_moments: ", json.loads(redis_client.get(ee_moments)))
         if state == State.GOING_UP:
             print("Going UP")
             # ---------------------
@@ -28,7 +32,7 @@ try:
             redis_client.set(goal_position_redis_key,
                              json.dumps(goal_position.tolist()))
             state = State.GOING_DOWN
-            time.sleep(1.5)
+            time.sleep(0.5)
 
         elif state == State.GOING_DOWN:
             print("Going DOWN")
@@ -39,7 +43,7 @@ try:
             redis_client.set(goal_position_redis_key,
                              json.dumps(goal_position.tolist()))
             state = State.GOING_UP
-            time.sleep(1.5)
+            time.sleep(0.5)
 
 except KeyboardInterrupt:
     print("Keyboard interrupt")

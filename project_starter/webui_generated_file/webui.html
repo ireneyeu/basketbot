@@ -39,7 +39,7 @@
 <sai-interfaces-tab-content name='PANDA'>
 <div class='row my-3'>
 <sai-interfaces-robot-controller robotName='PANDA'
-redisPrefix='opensai'
+redisPrefix='sai'
 controllerNames='["cartesian_controller", "joint_controller"]'
 controllerTaskNames='[["motion_force_task", "joint_task"], ["joint_task"]]'
 controllerTaskTypes='[["motion_force_task", "joint_task"], ["joint_task"]]'
@@ -58,7 +58,7 @@ maxDesiredMoments=[[5,[]],[[]]] />
 <sai-interfaces-tab-content name='Simviz'>
 <div class='row my-3'>
 <sai-interfaces-simviz
-redisPrefix='opensai'
+redisPrefix='sai'
 modelNames='["PANDA","sphere"]'
 modelTypes='["robot","object"]' />
 </div>

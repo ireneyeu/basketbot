@@ -100,7 +100,7 @@ None of the corresponding config parameters can be changed at runtime.
 	-->
 	<forceSensor robotOrObjectName="PANDA"
 		linkName="end-effector"
-		filterCutoff="5.0">
+		filterCutoff="0.5">
 		<!--
 		The optional <origin> element represents the transformation between the link frame and the sensor frame.
 		for the sensor. Its attributes are:
