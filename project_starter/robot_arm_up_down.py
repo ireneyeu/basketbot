@@ -38,12 +38,12 @@ try:
             print("Going DOWN")
             # ---------------------
             # modify the following line
-            goal_position = init_position + np.array([0, 0, -1.5])
+            goal_position = init_position + np.array([0, 0, -0.1])
             # ---------------------
             redis_client.set(goal_position_redis_key,
                              json.dumps(goal_position.tolist()))
             state = State.GOING_UP
-            time.sleep(2.5)
+            time.sleep(0.5)
 
 except KeyboardInterrupt:
     print("Keyboard interrupt")

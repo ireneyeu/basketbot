@@ -33,9 +33,9 @@ using namespace std;
 using namespace Eigen;
 
 // config file names and object names
-const string world_file = "${BASKETBOT_FOLDER}/world_example.urdf";
-const string robot_file = "${BASKETBOT_URDF_FOLDER}/puma/puma.urdf";
-const string robot_name = "PUMA";  // name in the workd file
+const string world_file = "${BASKETBOT_FOLDER}/world.urdf";
+const string robot_file = "${BASKETBOT_URDF_FOLDER}/panda/panda_arm_box.urdf";
+const string robot_name = "PANDA";  // name in the workd file
 
 // simulation and control loop
 void control(shared_ptr<SaiModel::SaiModel> robot,
