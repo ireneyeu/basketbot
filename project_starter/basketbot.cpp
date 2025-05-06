@@ -98,6 +98,7 @@ int main() {
 	ee_pos = robot->position(control_link, control_point);
 	ee_pos_desired  << 0.3, 0.3, 0.1;
 	pose_task->setGoalPosition(ee_pos_desired);
+
 	
 
 	// create a loop timer
@@ -126,9 +127,8 @@ int main() {
 		ee_forces = pose_task->getSensedForceControlWorldFrame();
 		ee_moments = pose_task->getSensedMomentControlWorldFrame();
 
-		if ((ee_forces).norm() > 0.0000001) {
-			cout << "EE_FORCES" << ee_forces.transpose() << endl;
-			cout << "EE_MOMENTS" << ee_moments.transpose() << endl;
+		if (ee_forces.norm() > 0.0001) {
+			cout << ee_forces.transpose() << endl;
 		}
 
 		
@@ -139,8 +139,6 @@ int main() {
 			pose_task->updateTaskModel(N_prec);
 
 			command_torques = pose_task->computeTorques();
-
-			cout << "Current position: " << ee_pos.transpose() << endl;
 
 			if ((ee_pos - ee_pos_desired).norm() < 1e-3) {
 				cout << "Posture To Motion" << endl;

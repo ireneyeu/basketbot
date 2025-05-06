@@ -100,13 +100,20 @@ int main() {
 	}
 
 	// set initial ball velocity
-	Vector3d ball_velocity(0.0, 0.0, 2.0);  // Example: 1 m/s in X
+	Vector3d ball_velocity(0.0, 0.0, 5.0);  // Example: 1 m/s in X
 	Vector3d ball_spin(0.0, 0.0, 0.0);      // No initial spin
+	// Vector3d ball_position(0.3, 0.3, -0.4);
+
+	Eigen::Vector3d ball_position(0.3, 0.3, -0.4);
+	Eigen::Affine3d ball_pose = Eigen::Affine3d::Identity();
+	ball_pose.translation() = ball_position;
+
+	sim->setObjectPose("BALL", ball_pose);
 	sim->setObjectVelocity("BALL", ball_velocity);
 
 	// set co-efficient of restition to zero for force control
 	sim->setCollisionRestitution(0.0);
-	sim->setCollisionRestitution(0.7, "BALL");
+	sim->setCollisionRestitution(1.0, "BALL");
 	sim->setCollisionRestitution(1.0, "Floor");
 
 	// set co-efficient of friction
