@@ -21,5 +21,5 @@
  const std::string GRIPPER_JOINT_ANGLES_KEY = "sai::sim::PANDA::sensors::q";
 //  const std::string GRIPPER_JOINT_VELOCITIES_KEY = "sai::sim::panda_gripper::sensors::dq";
 
- const std::string EE_FORCES = "sai::sensors::PANDA::ft_sensor::end-effector::force";
- const std::string EE_MOMENTS = "sai::sensors::PANDA::ft_sensor::end-effector::moment";
+ const std::string EE_FORCES_KEY = "sai::sensors::PANDA::ft_sensor::end-effector::force";
+ const std::string EE_MOMENTS_KEY = "sai::sensors::PANDA::ft_sensor::end-effector::moment";

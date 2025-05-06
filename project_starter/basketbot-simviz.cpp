@@ -1,121 +1,93 @@
-// #include "simviz/SimVizRedisInterface.h"
-// #include "simviz/SimVizConfigParser.h"
-
-// int main(int argc, char** argv) {
-// 	SaiModel::URDF_FOLDERS["BASKETBOT_URDF_FOLDER"] = std::string(BASKETBOT_URDF_FOLDER);
-//     SaiModel::URDF_FOLDERS["BASKETBOT_FOLDER"] = std::string(PROJECT_STARTER);
-//     std::string config_file = std::string(PROJECT_STARTER) + "/simviz_config.xml";
-//     SaiInterfaces::SimVizConfigParser parser;
-//     SaiInterfaces::SimVizRedisInterface simviz(parser.parseConfig(config_file));
-//     simviz.run();
-//     return 0;
-// }
-
-
-// #include <filesystem>
-
-// #include "MainRedisInterface.h"
-
-
-// int main(int argc, char** argv) {
-// 	SaiModel::URDF_FOLDERS["BASKETBOT_URDF_FOLDER"] = std::string(BASKETBOT_URDF_FOLDER);
-//     SaiModel::URDF_FOLDERS["BASKETBOT_FOLDER"] = std::string(PROJECT_STARTER);
-//     std::string config_file = "/simviz_config.xml";
-
-// 	// define the xml files folder. Only config files in that folder can be used
-// 	// by this application
-// 	std::string xml_files_folder = std::string(PROJECT_STARTER);
-// 	SaiInterfaces::MainRedisInterface main_interface(xml_files_folder,
-// 													  config_file);
-
-// 	return 0;
-// }
-
 /**
  * @file basketbot-simviz.cpp
  * @brief Simulation and visualization of panda robot with 1 DOF gripper 
  * 
  */
 
- #include <math.h>
- #include <signal.h>
- #include <iostream>
- #include <mutex>
- #include <string>
- #include <thread>
- #include <fstream>
- #include <filesystem>
- #include <iostream>
- #include <vector>
- #include <typeinfo>
- #include <random>
- 
- #include "SaiGraphics.h"
- #include "SaiModel.h"
- #include "SaiSimulation.h"
- #include "SaiPrimitives.h"
- #include "redis/RedisClient.h"
- #include "timer/LoopTimer.h"
- #include "logger/Logger.h"
- 
- bool fSimulationRunning = true;
- void sighandler(int){fSimulationRunning = false;}
- 
- #include "redis_keys.h"
- 
- using namespace Eigen;
- using namespace std;
- 
- // mutex and globals
- VectorXd ui_torques;
- mutex mutex_torques, mutex_update;
- 
- // specify urdf and robots 
- static const string robot_name = "PANDA";
- static const string camera_name = "camera_fixed";
- 
- // dynamic objects information
- const vector<std::string> object_names = {"BALL"};
- vector<Affine3d> object_poses;
- vector<VectorXd> object_velocities;
- const int n_objects = object_names.size();
- 
- // simulation thread
- void simulation(std::shared_ptr<SaiSimulation::SaiSimulation> sim);
- 
- int main() {
+#include <math.h>
+#include <signal.h>
+#include <iostream>
+#include <mutex>
+#include <string>
+#include <thread>
+#include <fstream>
+#include <filesystem>
+#include <iostream>
+#include <vector>
+#include <typeinfo>
+#include <random>
+
+#include "SaiGraphics.h"
+#include "SaiModel.h"
+#include "SaiSimulation.h"
+#include "SaiPrimitives.h"
+#include "redis/RedisClient.h"
+#include "timer/LoopTimer.h"
+#include "logger/Logger.h"
+
+bool fSimulationRunning = true;
+void sighandler(int){fSimulationRunning = false;}
+
+#include "redis_keys.h"
+
+using namespace Eigen;
+using namespace std;
+
+// mutex and globals
+VectorXd ui_torques;
+mutex mutex_torques, mutex_update;
+
+// specify urdf and robots 
+static const string robot_name = "PANDA";
+static const string camera_name = "camera_fixed";
+
+// dynamic objects information
+const vector<std::string> object_names = {"BALL"};
+vector<Affine3d> object_poses;
+vector<VectorXd> object_velocities;
+const int n_objects = object_names.size();
+
+// Force sensor information
+const string link_name = "end-effector";
+const Vector3d control_point = Vector3d(0, 0, 0.07);
+Affine3d compliant_frame = Affine3d::Identity();
+Vector3d sensed_force;
+Vector3d sensed_moment;
+
+// simulation thread
+void simulation(std::shared_ptr<SaiSimulation::SaiSimulation> sim);
+
+int main() {
 	//  SaiModel::URDF_FOLDERS["CS225A_URDF_FOLDER"] = string(CS225A_URDF_FOLDER);
 	SaiModel::URDF_FOLDERS["BASKETBOT_URDF_FOLDER"] = std::string(BASKETBOT_URDF_FOLDER);
-    SaiModel::URDF_FOLDERS["BASKETBOT_FOLDER"] = std::string(PROJECT_STARTER);
+	SaiModel::URDF_FOLDERS["BASKETBOT_FOLDER"] = std::string(PROJECT_STARTER);
 	//  static const string robot_file = string(CS225A_URDF_FOLDER) + "/panda/panda_arm_hand.urdf";
 	static const string robot_file = string(BASKETBOT_URDF_FOLDER) + "/panda/panda_arm_box.urdf";
 	//  static const string world_file = string(PANDA_FOLDER) + "/world.urdf";
 	static const string world_file = string(PROJECT_STARTER) + "/world.urdf";
 	std::cout << "Loading URDF world model file: " << world_file << endl;
- 
+
 	// start redis client
 	auto redis_client = SaiCommon::RedisClient();
 	redis_client.connect();
- 
+
 	// set up signal handler
 	signal(SIGABRT, &sighandler);
 	signal(SIGTERM, &sighandler);
 	signal(SIGINT, &sighandler);
- 
+
 	// load graphics scene
 	auto graphics = std::make_shared<SaiGraphics::SaiGraphics>(world_file, camera_name, false);
-	graphics->setBackgroundColor(66.0/255, 135.0/255, 245.0/255);  // set blue background 	
-	// graphics->showLinkFrame(true, robot_name, "link7", 0.15);  // can add frames for different links
-	// graphics->getCamera(camera_name)->setClippingPlanes(0.1, 50);  // set the near and far clipping planes 
+	graphics->setBackgroundColor(66.0/255, 135.0/255, 245.0/255);  // set blue background
 	graphics->addUIForceInteraction(robot_name);
- 
+
 	// load robots
 	auto robot = std::make_shared<SaiModel::SaiModel>(robot_file, false);
 	// robot->setQ();
 	// robot->setDq();
 	robot->updateModel();
 	ui_torques = VectorXd::Zero(robot->dof());
- 
+
 	// load simulation world
 	auto sim = std::make_shared<SaiSimulation::SaiSimulation>(world_file, false);
 	sim->setJointPositions(robot_name, robot->q());
@@ -128,11 +100,10 @@
 	}
 
 	// set initial ball velocity
-	Vector3d initial_linear_velocity(0.0, 0.0, 5.0);  // Example: 1 m/s in X
-	Vector3d initial_angular_velocity(0.0, 0.0, 0.0); // No initial spin
-	sim->setObjectVelocity("BALL", initial_linear_velocity);
-	// sim->setObjectAngularVelocity("BALL", initial_angular_velocity);
- 
+	Vector3d ball_velocity(0.0, 0.0, 5.0);  // Example: 1 m/s in X
+	Vector3d ball_spin(0.0, 0.0, 0.0);      // No initial spin
+	sim->setObjectVelocity("BALL", ball_velocity);
+
 	// set co-efficient of restition to zero for force control
 	sim->setCollisionRestitution(0.0);
 	sim->setCollisionRestitution(0.9, "BALL");
@@ -142,13 +113,15 @@
 	sim->setCoeffFrictionStatic(0.0);
 	sim->setCoeffFrictionDynamic(0.0);
 
+	sim->addSimulatedForceSensor(robot_name, link_name, compliant_frame, 1.0);
+
 	/*------- Set up visualization -------*/
 	// init redis client values 
 	redis_client.setEigen(JOINT_ANGLES_KEY, robot->q()); 
 	redis_client.setEigen(JOINT_VELOCITIES_KEY, robot->dq()); 
 	redis_client.setEigen(JOINT_TORQUES_COMMANDED_KEY, 0 * robot->q());
-	redis_client.setEigen(EE_FORCES, Vector3d::Zero());
-	redis_client.setEigen(EE_MOMENTS, Vector3d::Zero());
+	redis_client.setEigen(EE_FORCES_KEY, Vector3d::Zero());
+	redis_client.setEigen(EE_MOMENTS_KEY, Vector3d::Zero());
 
 	// start simulation thread
 	thread sim_thread(simulation, sim);
@@ -174,10 +147,10 @@
 	sim_thread.join();
 
 	return 0;
- }
- 
- //------------------------------------------------------------------------------
- void simulation(std::shared_ptr<SaiSimulation::SaiSimulation> sim) {
+}
+
+//------------------------------------------------------------------------------
+void simulation(std::shared_ptr<SaiSimulation::SaiSimulation> sim) {
 	// fSimulationRunning = true;
 
 	// create redis client
@@ -203,6 +176,11 @@
 		redis_client.setEigen(JOINT_ANGLES_KEY, sim->getJointPositions(robot_name));
 		redis_client.setEigen(JOINT_VELOCITIES_KEY, sim->getJointVelocities(robot_name));
 
+		sensed_force = sim->getSensedForce(robot_name, link_name);
+		sensed_moment = sim->getSensedMoment(robot_name, link_name);
+		redis_client.setEigen(EE_FORCES_KEY, sensed_force);
+		redis_client.setEigen(EE_MOMENTS_KEY, sensed_moment);
+
 		// update object information 
 		{
 			lock_guard<mutex> lock(mutex_update);
@@ -215,4 +193,4 @@
 	timer.stop();
 	cout << "\nSimulation loop timer stats:\n";
 	timer.printInfoPostRun();
- }
+}

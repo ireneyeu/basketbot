@@ -60,7 +60,7 @@ int main() {
 	// arm task
 	// const string control_link = "link7";
 	const string control_link = "end-effector";
-	const Vector3d control_point = Vector3d(0, 0, 0.07);
+	const Vector3d control_point = Vector3d(0, 0, 0.07); // NEED TO CHECK CONTROL POINT
 	Affine3d compliant_frame = Affine3d::Identity();
 	compliant_frame.translation() = control_point;
 	auto pose_task = std::make_shared<SaiPrimitives::MotionForceTask>(robot, control_link, compliant_frame);
@@ -132,12 +132,12 @@ int main() {
 		robot_q = robot->q();
 		robot_dq = robot->dq();
 
-		Vector3d ee_forces = redis_client.getEigen(EE_FORCES);
-		Vector3d ee_moments = redis_client.getEigen(EE_MOMENTS);
+		Vector3d ee_forces = redis_client.getEigen(EE_FORCES_KEY);
+		Vector3d ee_moments = redis_client.getEigen(EE_MOMENTS_KEY);
 
 		if ((ee_forces).norm() > 0.0000001) {
-			cout << "EE_FORCES" << redis_client.getEigen(EE_FORCES).transpose() << endl;
-			cout << "EE_MOMENTS" << redis_client.getEigen(EE_MOMENTS).transpose() << endl;
+			cout << "EE_FORCES" << redis_client.getEigen(EE_FORCES_KEY).transpose() << endl;
+			cout << "EE_MOMENTS" << redis_client.getEigen(EE_MOMENTS_KEY).transpose() << endl;
 		}
 
 		
