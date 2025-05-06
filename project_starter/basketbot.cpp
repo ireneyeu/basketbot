@@ -96,7 +96,7 @@ int main() {
 	
 	// Initial robot state
 	ee_pos = robot->position(control_link, control_point);
-	ee_pos_desired  << 0.3, 0.3, 0.7;
+	ee_pos_desired  << 0.3, 0.3, 0.1;
 	pose_task->setGoalPosition(ee_pos_desired);
 	
 
@@ -121,22 +121,26 @@ int main() {
 		robot_q = robot->q();
 		robot_dq = robot->dq();
 
-		// ee_forces = pose_task->getSensedForceControlWorldFrame();
-		// ee_moments = pose_task->getSensedMomentControlWorldFrame();
+		pose_task->updateSensedForceAndMoment(redis_client.getEigen(EE_FORCES_KEY), redis_client.getEigen(EE_MOMENTS_KEY));
+
+		ee_forces = pose_task->getSensedForceControlWorldFrame();
+		ee_moments = pose_task->getSensedMomentControlWorldFrame();
 
 		if ((ee_forces).norm() > 0.0000001) {
-			cout << "EE_FORCES" << redis_client.getEigen(EE_FORCES_KEY).transpose() << endl;
-			cout << "EE_MOMENTS" << redis_client.getEigen(EE_MOMENTS_KEY).transpose() << endl;
+			cout << "EE_FORCES" << ee_forces.transpose() << endl;
+			cout << "EE_MOMENTS" << ee_moments.transpose() << endl;
 		}
 
 		
 		if (state == POSTURE) {
 			// update task model 
-			cout << "Establishing posture" << endl;
+			// cout << "Establishing posture" << endl;
 			N_prec.setIdentity();
 			pose_task->updateTaskModel(N_prec);
 
 			command_torques = pose_task->computeTorques();
+
+			cout << "Current position: " << ee_pos.transpose() << endl;
 
 			if ((ee_pos - ee_pos_desired).norm() < 1e-3) {
 				cout << "Posture To Motion" << endl;

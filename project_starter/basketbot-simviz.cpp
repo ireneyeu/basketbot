@@ -47,12 +47,12 @@ vector<Affine3d> object_poses;
 vector<VectorXd> object_velocities;
 const int n_objects = object_names.size();
 
-// // Force sensor information
-// const string link_name = "end-effector";
-// const Vector3d control_point = Vector3d(0, 0, 0.07);
-// Affine3d compliant_frame = Affine3d::Identity();
-// Vector3d sensed_force;
-// Vector3d sensed_moment;
+// Force sensor information
+const string link_name = "end-effector";
+const Vector3d control_point = Vector3d(0, 0, 0.07);
+Affine3d compliant_frame = Affine3d::Identity();
+Vector3d sensed_force;
+Vector3d sensed_moment;
 
 // simulation thread
 void simulation(std::shared_ptr<SaiSimulation::SaiSimulation> sim);
@@ -113,8 +113,8 @@ int main() {
 	sim->setCoeffFrictionStatic(0.0);
 	sim->setCoeffFrictionDynamic(0.0);
 
-	// // set up force sensor
-	// sim->addSimulatedForceSensor(robot_name, link_name, compliant_frame, 1.0);
+	// set up force sensor
+	sim->addSimulatedForceSensor(robot_name, link_name, compliant_frame, 1.0);
 
 	/*------- Set up visualization -------*/
 	// init redis client values 
@@ -177,11 +177,11 @@ void simulation(std::shared_ptr<SaiSimulation::SaiSimulation> sim) {
 		redis_client.setEigen(JOINT_ANGLES_KEY, sim->getJointPositions(robot_name));
 		redis_client.setEigen(JOINT_VELOCITIES_KEY, sim->getJointVelocities(robot_name));
 
-		// // force sensor
-		// sensed_force = sim->getSensedForce(robot_name, link_name);
-		// sensed_moment = sim->getSensedMoment(robot_name, link_name);
-		// redis_client.setEigen(EE_FORCES_KEY, sensed_force);
-		// redis_client.setEigen(EE_MOMENTS_KEY, sensed_moment);
+		// force sensor
+		sensed_force = sim->getSensedForce(robot_name, link_name);
+		sensed_moment = sim->getSensedMoment(robot_name, link_name);
+		redis_client.setEigen(EE_FORCES_KEY, sensed_force);
+		redis_client.setEigen(EE_MOMENTS_KEY, sensed_moment);
 
 		// update object information 
 		{
