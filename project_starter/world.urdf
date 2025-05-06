@@ -13,8 +13,8 @@
 			<geometry>
 				<box size="5.0 5.0 0.1" />
 			</geometry>
-			<material name="material_blue">
-				<color rgba="0.0 0.1 0.5 1.0" />
+			<material name="material_black">
+				<color rgba="0.2 0.2 0.2 1.0" />
 			</material>
 		</visual>
 		<collision>
@@ -25,8 +25,8 @@
 		</collision>
 	</static_object>
 
-	<dynamic_object name="sphere">
-		<origin xyz="0.4 0.0 0.30" rpy="0 0 0" />
+	<dynamic_object name="BALL">
+		<origin xyz="0.3 0.3 0.40" rpy="0 0 0" />
 		<visual>
 			<origin xyz="0 0 0" rpy="0 0 0" />
 			<geometry>
@@ -39,7 +39,7 @@
 		<collision>
 			<origin xyz="0 0 0" rpy="0 0 0" />
 			<geometry>
-				<sphere radius="0.05" />
+				<sphere radius="0.15" />
 			</geometry>
 		</collision>
 		<mass value="0.6" />

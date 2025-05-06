@@ -62,12 +62,12 @@ None of the corresponding config parameters can be changed at runtime.
 		framesRenderingEnabled="false"
 		frameSizeWhenRendering="0.2" />
 
-	<robotOrObjectSpecificParameters name="sphere"
+	<robotOrObjectSpecificParameters name="BALL"
 		dynamicsEnabled="true"
 		renderingEnabled="true"
 		collisionRestitutionCoefficient="1.5"
 	/>
-	<robotOrObjectSpecificParameters name="floor"
+	<robotOrObjectSpecificParameters name="Floor"
 		dynamicsEnabled="true"
 		renderingEnabled="true"
 		collisionRestitutionCoefficient="1"
