@@ -126,6 +126,12 @@
 		object_poses.push_back(sim->getObjectPose(object_names[i]));
 		object_velocities.push_back(sim->getObjectVelocity(object_names[i]));
 	}
+
+	// set initial ball velocity
+	Vector3d initial_linear_velocity(0.0, 0.0, 5.0);  // Example: 1 m/s in X
+	Vector3d initial_angular_velocity(0.0, 0.0, 0.0); // No initial spin
+	sim->setObjectVelocity("BALL", initial_linear_velocity);
+	// sim->setObjectAngularVelocity("BALL", initial_angular_velocity);
  
 	// set co-efficient of restition to zero for force control
 	sim->setCollisionRestitution(0.0);
