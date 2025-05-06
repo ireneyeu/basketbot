@@ -64,8 +64,8 @@ int main() {
 	Affine3d compliant_frame = Affine3d::Identity();
 	compliant_frame.translation() = control_point;
 	auto pose_task = std::make_shared<SaiPrimitives::MotionForceTask>(robot, control_link, compliant_frame);
-	pose_task->setPosControlGains(400, 40, 0);
-	pose_task->setOriControlGains(400, 40, 0);
+	pose_task->setPosControlGains(100, 20, 0);
+	pose_task->setOriControlGains(200, 30, 0);
 
 	// Robot states
 	Vector3d ee_pos;
@@ -73,6 +73,8 @@ int main() {
 	Matrix3d ee_ori;
 	VectorXd robot_q(dof);
 	VectorXd robot_dq(dof);
+	Vector3d ee_forces;
+	Vector3d ee_moments;
 
 	// Desired states
 	Vector3d ee_pos_desired;
@@ -81,22 +83,9 @@ int main() {
 	VectorXd q_desired(dof);
 
 
-	//
-
-	// // gripper partial joint task 
-	// MatrixXd gripper_selection_matrix = MatrixXd::Zero(2, robot->dof());
-	// gripper_selection_matrix(0, 7) = 1;
-	// gripper_selection_matrix(1, 8) = 1;
-	// auto gripper_task = std::make_shared<SaiPrimitives::JointTask>(robot, gripper_selection_matrix);
-	// gripper_task->setDynamicDecouplingType(SaiPrimitives::DynamicDecouplingType::IMPEDANCE);
-	// double kp_gripper = 5e3;
-	// double kv_gripper = 1e2;
-	// gripper_task->setGains(kp_gripper, kv_gripper, 0);
-	// gripper_task->setGains(kp_gripper, kv_gripper, 0);
-
 	// joint task
 	auto joint_task = std::make_shared<SaiPrimitives::JointTask>(robot);
-	joint_task->setGains(400, 40, 0);
+	joint_task->setGains(50, 14, 0);
 
 	// VectorXd q_desired(dof);
 	// q_desired.head(7) << 0.0, 30.0, 0.0, -60.0, 0.0, 90.0, 45.0;
@@ -107,7 +96,7 @@ int main() {
 	
 	// Initial robot state
 	ee_pos = robot->position(control_link, control_point);
-	ee_pos_desired  << 0.3, 0.3, 0.5;
+	ee_pos_desired  << 0.3, 0.3, 0.7;
 	pose_task->setGoalPosition(ee_pos_desired);
 	
 
@@ -132,8 +121,8 @@ int main() {
 		robot_q = robot->q();
 		robot_dq = robot->dq();
 
-		Vector3d ee_forces = redis_client.getEigen(EE_FORCES_KEY);
-		Vector3d ee_moments = redis_client.getEigen(EE_MOMENTS_KEY);
+		// ee_forces = pose_task->getSensedForceControlWorldFrame();
+		// ee_moments = pose_task->getSensedMomentControlWorldFrame();
 
 		if ((ee_forces).norm() > 0.0000001) {
 			cout << "EE_FORCES" << redis_client.getEigen(EE_FORCES_KEY).transpose() << endl;
@@ -143,46 +132,31 @@ int main() {
 		
 		if (state == POSTURE) {
 			// update task model 
+			cout << "Establishing posture" << endl;
 			N_prec.setIdentity();
-			// joint_task->updateTaskModel(N_prec);
 			pose_task->updateTaskModel(N_prec);
 
-			// command_torques = joint_task->computeTorques();
 			command_torques = pose_task->computeTorques();
 
 			if ((ee_pos - ee_pos_desired).norm() < 1e-3) {
 				cout << "Posture To Motion" << endl;
 				pose_task->reInitializeTask();
-				// gripper_task->reInitializeTask();
 				joint_task->reInitializeTask();
 
 				pose_task->setGoalPosition(ee_pos + Vector3d(0.0, 0.0, 0.2));
-
-				// pose_task->setGoalOrientation(AngleAxisd(M_PI/4, Vector3d::UnitY()).toRotationMatrix() * ee_ori);
-
-				// gripper_task->setGoalPosition(Vector2d(0.02, -0.02));
+				joint_task->setGoalPosition(robot_q);
 
 				state = MOTION;
 			}
 		} else if (state == MOTION) {
-			// update goal position and orientation
-			if (ee_pos(2) > 0.01) {
-				ee_pos_desired(2) -= 0.01;
-			}
-			else if (ee_pos(2) < 0.01) {
-				state = POSTURE;
-				ee_pos_desired  << 0.4, 0.0, 0.5;
-				cout << "Motion To Posture" << endl;
-			}
 
-			
+			ee_pos_desired = ee_pos + Vector3d(0.0, 0.0, -0.01);
 			pose_task->setGoalPosition(ee_pos_desired);
+
 
 			// update task model
 			N_prec.setIdentity();
 			pose_task->updateTaskModel(N_prec);
-			// gripper_task->updateTaskModel(pose_task->getTaskAndPreviousNullspace());
-			// joint_task->updateTaskModel(gripper_task->getTaskAndPreviousNullspace());
 			joint_task->updateTaskModel(pose_task->getTaskAndPreviousNullspace());
 
 
