@@ -53,6 +53,7 @@ const Vector3d control_point = Vector3d(0.2, 0, 0.12);
 Affine3d compliant_frame = Affine3d::Identity();
 Vector3d sensed_force;
 Vector3d sensed_moment;
+double cutoff_freq = 2.0;
 
 // simulation thread
 void simulation(std::shared_ptr<SaiSimulation::SaiSimulation> sim);
@@ -117,7 +118,7 @@ int main() {
 	sim->setCoeffFrictionDynamic(0.0);
 
 	// set up force sensor
-	sim->addSimulatedForceSensor(robot_name, link_name, compliant_frame, 2.0);
+	sim->addSimulatedForceSensor(robot_name, link_name, compliant_frame, cutoff_freq);
 
 	/*------- Set up visualization -------*/
 	// init redis client values 

@@ -77,6 +77,7 @@ int main() {
 	VectorXd robot_dq(dof);
 	Vector3d ee_forces;
 	Vector3d ee_moments;
+	float z_contact = 10.0;
 
 	// Desired states
 	Vector3d ee_pos_desired;
@@ -134,9 +135,9 @@ int main() {
 		ee_forces = pose_task->getSensedForceControlWorldFrame();
 		ee_moments = pose_task->getSensedMomentControlWorldFrame();
 
-		// if (ee_forces(2) < 0.00001) {
-		// 	cout << ee_forces(2) << endl;
-		// }
+		if (abs(ee_forces(2)) > 0.0000001) {
+			cout << ee_forces(2) << endl;
+		}
 
 		
 		if (state == POSTURE) {
@@ -193,7 +194,6 @@ int main() {
 			kv_xyz(2) = 0.0;
 			pose_task->setPosControlGains(kp_xyz, kv_xyz);
 
-
 			// update task model
 			N_prec.setIdentity();
 			pose_task->updateTaskModel(N_prec);
@@ -201,16 +201,26 @@ int main() {
 
 			command_torques = pose_task->computeTorques() + joint_task->computeTorques();
 
-			if (ee_pos(2) > initial_ee_pos(2) + 0.1) {
+			// checking for contact
+			if (abs(ee_forces(2)) > 0.0000001 && z_contact > 5.0) {
+				cout << "Contact Detected" << endl;
+				z_contact = ee_pos(2);
+				cout << ee_forces(2) << endl;
+			}
+
+			if (ee_pos(2) > z_contact + 0.1) {
 				cout << "Motion Up to Motion Down" << endl;
+				// clear values for next motion
+				z_contact = 10.0;
 				pose_task->reInitializeTask();
 				joint_task->reInitializeTask();
 
+				// set up new gains
 				kp_xyz(2) = 100.0;
 				kv_xyz(2) = 100.0;
 				pose_task->setPosControlGains(kp_xyz, kv_xyz);
 
-				ee_pos_desired = initial_ee_pos + Vector3d(0.0, 0.0, -0.3);
+				ee_pos_desired(2) = z_contact -0.2;
 				q_desired = robot_q;
 
 				cout << "ee " << ee_pos_desired.transpose() << endl;
