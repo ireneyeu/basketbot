@@ -49,7 +49,7 @@ const int n_objects = object_names.size();
 
 // Force sensor information
 const string link_name = "end-effector";
-const Vector3d control_point = Vector3d(0, 0, 0.07);
+const Vector3d control_point = Vector3d(0.2, 0, 0.12);
 Affine3d compliant_frame = Affine3d::Identity();
 Vector3d sensed_force;
 Vector3d sensed_moment;
@@ -58,12 +58,9 @@ Vector3d sensed_moment;
 void simulation(std::shared_ptr<SaiSimulation::SaiSimulation> sim);
 
 int main() {
-	//  SaiModel::URDF_FOLDERS["CS225A_URDF_FOLDER"] = string(CS225A_URDF_FOLDER);
 	SaiModel::URDF_FOLDERS["BASKETBOT_URDF_FOLDER"] = std::string(BASKETBOT_URDF_FOLDER);
 	SaiModel::URDF_FOLDERS["BASKETBOT_FOLDER"] = std::string(PROJECT_STARTER);
-	//  static const string robot_file = string(CS225A_URDF_FOLDER) + "/panda/panda_arm_hand.urdf";
 	static const string robot_file = string(BASKETBOT_URDF_FOLDER) + "/panda/panda_arm_box.urdf";
-	//  static const string world_file = string(PANDA_FOLDER) + "/world.urdf";
 	static const string world_file = string(PROJECT_STARTER) + "/world.urdf";
 	std::cout << "Loading URDF world model file: " << world_file << endl;
 
@@ -103,7 +100,7 @@ int main() {
 	Vector3d ball_velocity(0.0, 0.0, 3.5);  // Example: 1 m/s in X
 	Vector3d ball_spin(0.0, 0.0, 0.0);      // No initial spin
 
-	Vector3d ball_position(0.68468, 0.0, -0.4);
+	Vector3d ball_position(0.65, 0.0, -0.4);
 	Affine3d ball_pose = Affine3d::Identity();
 	ball_pose.translation() = ball_position;
 
@@ -120,7 +117,7 @@ int main() {
 	sim->setCoeffFrictionDynamic(0.0);
 
 	// set up force sensor
-	sim->addSimulatedForceSensor(robot_name, link_name, compliant_frame, 1.0);
+	sim->addSimulatedForceSensor(robot_name, link_name, compliant_frame, 2.0);
 
 	/*------- Set up visualization -------*/
 	// init redis client values 
