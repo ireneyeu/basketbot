@@ -100,7 +100,7 @@ int main() {
 	}
 
 	// set initial ball velocity
-	Vector3d ball_velocity(0.0, 0.0, 3.0);  // Example: 1 m/s in X
+	Vector3d ball_velocity(0.0, 0.0, 3.5);  // Example: 1 m/s in X
 	Vector3d ball_spin(0.0, 0.0, 0.0);      // No initial spin
 
 	Vector3d ball_position(0.68468, 0.0, -0.4);

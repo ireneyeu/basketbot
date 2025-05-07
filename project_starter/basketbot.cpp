@@ -162,7 +162,6 @@ int main() {
 				state = MOTION_DOWN;
 			}
 		} else if (state == MOTION_DOWN) {
-
 			// update task model
 			N_prec.setIdentity();
 			pose_task->updateTaskModel(N_prec);
@@ -171,7 +170,7 @@ int main() {
 			command_torques = pose_task->computeTorques() + joint_task->computeTorques();
 
 			if ((ee_pos - ee_pos_desired).norm() < 1e-3) {
-				cout << "Motion Down to Posture" << endl;
+				cout << "Motion Down to Motion Up" << endl;
 				pose_task->reInitializeTask();
 				joint_task->reInitializeTask();
 
@@ -184,7 +183,31 @@ int main() {
 				pose_task->setGoalOrientation(ee_ori);
 				joint_task->setGoalPosition(q_desired);
 
-				state = POSTURE;
+				state = MOTION_UP;
+			}
+		} else if (state == MOTION_UP) {
+			// update task model
+			N_prec.setIdentity();
+			pose_task->updateTaskModel(N_prec);
+			joint_task->updateTaskModel(pose_task->getTaskAndPreviousNullspace());
+
+			command_torques = pose_task->computeTorques() + joint_task->computeTorques();
+
+			if ((ee_pos - ee_pos_desired).norm() < 1e-3) {
+				cout << "Motion Up to Motion Down" << endl;
+				pose_task->reInitializeTask();
+				joint_task->reInitializeTask();
+
+				ee_pos_desired = initial_ee_pos + Vector3d(0.0, 0.0, -0.2);
+				q_desired = robot_q;
+
+				cout << "Desired end-effector position: " << ee_pos_desired.transpose() << endl;
+
+				pose_task->setGoalPosition(ee_pos_desired);
+				pose_task->setGoalOrientation(ee_ori);
+				joint_task->setGoalPosition(q_desired);
+
+				state = MOTION_DOWN;
 			}
 		}
 
