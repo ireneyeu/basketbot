@@ -191,7 +191,7 @@ int main() {
 		} else if (state == MOTION_UP) {
 			// compliant in Z direction
 			kp_xyz(2) = 0.0;
-			kv_xyz(2) = 0.0;
+			kv_xyz(2) = 100.0;
 			pose_task->setPosControlGains(kp_xyz, kv_xyz);
 
 			// update task model
