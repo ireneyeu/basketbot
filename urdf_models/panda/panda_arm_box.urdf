@@ -145,7 +145,7 @@
 		</inertial>
 		<visual>
 			<geometry>
-				<box size="0.25 0.20 0.02" />
+				<box size="0.35 0.15 0.02" />
 			</geometry>
 			<material name="material_grey">
 				<color rgba="0.75 0.75 0.75 1.0" />
@@ -153,7 +153,7 @@
 		</visual>
 		<collision>
 			<geometry>
-				<box size="0.25 0.20 0.02" />
+				<box size="0.35 0.15 0.02" />
 			</geometry>
 		</collision>
 	</link>

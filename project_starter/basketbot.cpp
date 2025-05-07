@@ -25,12 +25,12 @@ void sighandler(int){runloop = false;}
 // States 
 enum State {
 	POSTURE = 0, 
-	MOTION
+	MOTION_UP,
+	MOTION_DOWN,
 };
 
 int main() {
 	// Location of URDF files specifying world and robot information
-	// static const string robot_file = string(CS225A_URDF_FOLDER) + "/panda/panda_arm_hand.urdf";
 	static const string robot_file = string(BASKETBOT_URDF_FOLDER) + "/panda/panda_arm_box.urdf";
 
 	// initial state 
@@ -60,7 +60,7 @@ int main() {
 	// arm task
 	// const string control_link = "link7";
 	const string control_link = "end-effector";
-	const Vector3d control_point = Vector3d(0, 0, 0.07); // NEED TO CHECK CONTROL POINT
+	const Vector3d control_point = Vector3d(0.20, 0, 0.02); // NEED TO CHECK CONTROL POINT
 	Affine3d compliant_frame = Affine3d::Identity();
 	compliant_frame.translation() = control_point;
 	auto pose_task = std::make_shared<SaiPrimitives::MotionForceTask>(robot, control_link, compliant_frame);
@@ -95,15 +95,20 @@ int main() {
 
 	
 	// Initial robot state
-	ee_pos = robot->position(control_link, control_point);
-	ee_pos_desired  << 0.3, 0.3, 0.1;
+	Vector3d initial_ee_pos = robot->position(control_link, control_point);
+	cout << "Initial end-effector position: " << initial_ee_pos.transpose() << endl;
+	ee_pos_desired = initial_ee_pos;
 	pose_task->setGoalPosition(ee_pos_desired);
 
-	
+	VectorXd initial_joint_angles = robot->q();
+	q_desired = initial_joint_angles;
+	joint_task->setGoalPosition(q_desired);	
+
+	cout << "Establishing posture" << endl;
 
 	// create a loop timer
 	runloop = true;
-	double control_freq = 1000;
+	double control_freq = 1000; // should be 1000
 	SaiCommon::LoopTimer timer(control_freq, 1e6);
 
 	while (runloop) {
@@ -134,36 +139,53 @@ int main() {
 		
 		if (state == POSTURE) {
 			// update task model 
-			// cout << "Establishing posture" << endl;
 			N_prec.setIdentity();
 			pose_task->updateTaskModel(N_prec);
+			joint_task->updateTaskModel(pose_task->getTaskAndPreviousNullspace());
 
-			command_torques = pose_task->computeTorques();
+			command_torques = pose_task->computeTorques() + joint_task->computeTorques();
 
 			if ((ee_pos - ee_pos_desired).norm() < 1e-3) {
-				cout << "Posture To Motion" << endl;
+				cout << "Posture To Motion Down" << endl;
 				pose_task->reInitializeTask();
 				joint_task->reInitializeTask();
 
-				pose_task->setGoalPosition(ee_pos + Vector3d(0.0, 0.0, 0.2));
-				joint_task->setGoalPosition(robot_q);
+				ee_pos_desired = ee_pos + Vector3d(0.0, 0.0, -0.2);
+				q_desired = robot_q;
 
-				state = MOTION;
+				cout << "Desired end-effector position: " << ee_pos_desired.transpose() << endl;
+
+				pose_task->setGoalPosition(ee_pos_desired);
+				pose_task->setGoalOrientation(ee_ori);
+				joint_task->setGoalPosition(q_desired);
+
+				state = MOTION_DOWN;
 			}
-		} else if (state == MOTION) {
-
-			ee_pos_desired = ee_pos + Vector3d(0.0, 0.0, -0.01);
-			pose_task->setGoalPosition(ee_pos_desired);
-
+		} else if (state == MOTION_DOWN) {
 
 			// update task model
 			N_prec.setIdentity();
 			pose_task->updateTaskModel(N_prec);
 			joint_task->updateTaskModel(pose_task->getTaskAndPreviousNullspace());
 
-
-			// command_torques = pose_task->computeTorques() + gripper_task->computeTorques() + joint_task->computeTorques();
 			command_torques = pose_task->computeTorques() + joint_task->computeTorques();
+
+			if ((ee_pos - ee_pos_desired).norm() < 1e-3) {
+				cout << "Motion Down to Posture" << endl;
+				pose_task->reInitializeTask();
+				joint_task->reInitializeTask();
+
+				ee_pos_desired = initial_ee_pos + Vector3d(0.0, 0.0, 0.2);
+				q_desired = robot_q;
+
+				cout << "Desired end-effector position: " << ee_pos_desired.transpose() << endl;
+
+				pose_task->setGoalPosition(ee_pos_desired);
+				pose_task->setGoalOrientation(ee_ori);
+				joint_task->setGoalPosition(q_desired);
+
+				state = POSTURE;
+			}
 		}
 
 		// execute redis write callback

@@ -100,12 +100,11 @@ int main() {
 	}
 
 	// set initial ball velocity
-	Vector3d ball_velocity(0.0, 0.0, 5.0);  // Example: 1 m/s in X
+	Vector3d ball_velocity(0.0, 0.0, 3.0);  // Example: 1 m/s in X
 	Vector3d ball_spin(0.0, 0.0, 0.0);      // No initial spin
-	// Vector3d ball_position(0.3, 0.3, -0.4);
 
-	Eigen::Vector3d ball_position(0.3, 0.3, -0.4);
-	Eigen::Affine3d ball_pose = Eigen::Affine3d::Identity();
+	Vector3d ball_position(0.68468, 0.0, -0.4);
+	Affine3d ball_pose = Affine3d::Identity();
 	ball_pose.translation() = ball_position;
 
 	sim->setObjectPose("BALL", ball_pose);
@@ -166,7 +165,7 @@ void simulation(std::shared_ptr<SaiSimulation::SaiSimulation> sim) {
 	redis_client.connect();
 
 	// create a timer
-	double sim_freq = 2000;
+	double sim_freq = 2000; // should be 2000
 	SaiCommon::LoopTimer timer(sim_freq);
 
 	sim->setTimestep(1.0 / sim_freq);
