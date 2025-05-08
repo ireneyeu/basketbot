@@ -98,10 +98,10 @@ int main() {
 	}
 
 	// set initial ball velocity
-	Vector3d ball_velocity(0.0, 0.0, 3.5);  // Example: 1 m/s in X
+	Vector3d ball_velocity(0.0, 0.0, 2.8);  // Example: 1 m/s in X
 	Vector3d ball_spin(0.0, 0.0, 0.0);      // No initial spin
 
-	Vector3d ball_position(0.65, 0.0, -0.4);
+	Vector3d ball_position(0.65, 0.0, 0.0);
 	Affine3d ball_pose = Affine3d::Identity();
 	ball_pose.translation() = ball_position;
 
