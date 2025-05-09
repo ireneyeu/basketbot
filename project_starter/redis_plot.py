@@ -4,7 +4,9 @@ import time, redis
 import signal
 
 # Redis keys
-EE_FORCES_KEY = "sai::sensors::PANDA::ft_sensor::end-effector::force";
+EE_FORCES_KEY = "sai::sensors::PANDA::ft_sensor::end-effector::force"
+BALL_POSITION_KEY = "sai::sim::BALL::sensors::position"
+BALL_VELOCITY_KEY = "sai::sim::BALL::sensors::velocity"
 
 # Redis connection
 redis_client = redis.Redis()
@@ -13,6 +15,14 @@ redis_client = redis.Redis()
 EE_X_FORCE = []
 EE_Y_FORCE = []
 EE_Z_FORCE = []
+
+BALL_X_POSITION = []
+BALL_Y_POSITION = []
+BALL_Z_POSITION = []
+
+BALL_X_VELOCITY = []
+BALL_Y_VELOCITY = []
+BALL_Z_VELOCITY = []
 
 # Graceful shutdown on Ctrl+C
 running = True
@@ -28,12 +38,22 @@ try:
         try:
             robot_forces_redis = redis_client.get(EE_FORCES_KEY).decode("utf-8")
             robot_forces = [float(x) for x in robot_forces_redis.strip('[]').split(',')]
-            ee_x_force = robot_forces[0]
-            ee_y_force = robot_forces[1]
-            ee_z_force = robot_forces[2]
-            EE_X_FORCE.append(ee_x_force)
-            EE_Y_FORCE.append(ee_y_force)
-            EE_Z_FORCE.append(ee_z_force)
+            EE_X_FORCE.append(robot_forces[0])
+            EE_Y_FORCE.append(robot_forces[1])
+            EE_Z_FORCE.append(robot_forces[2])
+
+            ball_position_redis = redis_client.get(BALL_POSITION_KEY).decode("utf-8")
+            ball_position = [float(x) for x in ball_position_redis.strip('[]').split(',')]
+            BALL_X_POSITION.append(ball_position[0])
+            BALL_Y_POSITION.append(ball_position[1])
+            BALL_Z_POSITION.append(ball_position[2])
+
+            ball_velocity_redis = redis_client.get(BALL_VELOCITY_KEY).decode("utf-8")
+            ball_velocity = [float(x) for x in ball_velocity_redis.strip('[]').split(',')]
+            BALL_X_VELOCITY.append(ball_velocity[0])
+            BALL_Y_VELOCITY.append(ball_velocity[1])
+            BALL_Z_VELOCITY.append(ball_velocity[2])
+
 
         except Exception as e:
             print(f"Error: {e}")
@@ -56,6 +76,30 @@ finally:
     plt.legend()
     plt.grid(True)
     # plt.savefig("end_effector_forces.png")
+    plt.show()
+
+    plt.figure()
+    plt.plot(BALL_X_POSITION, label='X Position', color='r')
+    plt.plot(BALL_Y_POSITION, label='Y Position', color='g')
+    plt.plot(BALL_Z_POSITION, label='Z Position', color='b')
+    plt.xlabel("Time [s]")
+    plt.ylabel("Position [m]")
+    plt.title("Ball Position")
+    plt.legend()
+    plt.grid(True)
+    # plt.savefig("ball_position.png")
+    plt.show()
+
+    plt.figure()
+    plt.plot(BALL_X_VELOCITY, label='X Velocity', color='r')
+    plt.plot(BALL_Y_VELOCITY, label='Y Velocity', color='g')
+    plt.plot(BALL_Z_VELOCITY, label='Z Velocity', color='b')
+    plt.xlabel("Time [s]")
+    plt.ylabel("Velocity [m/s]")
+    plt.title("Ball Velocity")
+    plt.legend()
+    plt.grid(True)
+    # plt.savefig("ball_velocity.png")
     plt.show()
 
     print("Plotting done.")
