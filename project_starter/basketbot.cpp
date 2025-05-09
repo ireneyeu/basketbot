@@ -52,24 +52,27 @@ int main() {
 	robot->setDq(redis_client.getEigen(JOINT_VELOCITIES_KEY));
 	robot->updateModel();
 
-	// prepare controller
+	// prepare controllers
 	int dof = robot->dof();
 	VectorXd command_torques = VectorXd::Zero(dof);  
 	MatrixXd N_prec = MatrixXd::Identity(dof, dof);
 
 	// arm task
-	// const string control_link = "link7";
 	const string control_link = "end-effector";
 	const Vector3d control_point = Vector3d(0.20, 0, 0.02); // NEED TO CHECK CONTROL POINT
 	Affine3d compliant_frame = Affine3d::Identity();
 	compliant_frame.translation() = control_point;
 	auto pose_task = std::make_shared<SaiPrimitives::MotionForceTask>(robot, control_link, compliant_frame);
-	VectorXd kp_xyz = Vector3d(400.0, 400.0, 400.0);
-	VectorXd kv_xyz = Vector3d(100.0, 100.0, 100.0);
-	pose_task->setPosControlGains(kp_xyz, kv_xyz);
-	VectorXd kp_ori_xyz = Vector3d(200.0, 200.0, 200.0);
-	VectorXd kv_ori_xyz = Vector3d(30.0, 30.0, 30.0);
-	pose_task->setOriControlGains(kp_ori_xyz, kv_ori_xyz);
+	
+	// joint task
+	auto joint_task = std::make_shared<SaiPrimitives::JointTask>(robot);
+
+
+	// // Define Information
+	// Ball information
+	Vector3d ball_position;
+	Vector3d ball_velocity;
+	Vector3d ball_vel_des;
 
 	// Robot states
 	Vector3d ee_pos;
@@ -80,44 +83,66 @@ int main() {
 	Vector3d ee_forces;
 	Vector3d ee_moments;
 
-	// Ball information
-	Vector3d ball_position;
-	Vector3d ball_velocity;
-	Vector3d ball_vel_des;
+	// Robot initial states
+	Vector3d ee_pos_init;
+	Vector3d ee_vel_init;
+	Matrix3d ee_ori_init;
+	VectorXd robot_q_init(dof);
+	VectorXd robot_dq_init(dof);
 
-
-	// Desired states
+	// Robot desired states
 	Vector3d ee_pos_desired;
 	Vector3d ee_vel_desired;
 	Matrix3d ee_ori_desired;
 	VectorXd q_desired(dof);
 
-
-	// joint task
-	auto joint_task = std::make_shared<SaiPrimitives::JointTask>(robot);
-	joint_task->setGains(50, 14, 0);
+	// Robot Gains
+	VectorXd kp_xyz;
+	VectorXd kv_xyz;
+	VectorXd kp_vel_xyz;
+	VectorXd kv_vel_xyz;
+	VectorXd kp_ori_xyz;
+	VectorXd kv_ori_xyz;
 	
 	// Initial robot state
-	Vector3d initial_ee_pos = robot->position(control_link, control_point);
-	Matrix3d ee_init_ori;
-	ee_init_ori << 1, 0, 0,
+	// ee_pos_init = robot->position(control_link, control_point);
+	// ee_vel_init = robot->linearVelocity(control_link, control_point);
+	// ee_ori_init = robot->rotation(control_link);
+	// robot_q_init = robot->q();
+	// robot_dq_init = robot->dq();
+	ee_pos_init << 0.7, 0.0, 0.427;
+	ee_vel_init = Vector3d::Zero();
+	ee_ori_init << 1, 0, 0,
 					0, -1, 0,
 					0, 0, -1;
-	VectorXd initial_joint_angles = robot->q();
+	robot_q_init << 0.0, -25.0, 0.0, -135.0, 0.0, 105.0, 0.0;
+	robot_q_init *= M_PI/180.0;
+	robot_dq_init = VectorXd::Zero(dof);
 
 
-	cout << "Initial end-effector position: " << initial_ee_pos.transpose() << endl;
+	// Desired robot states and gains
+	// Set Gains
+	kp_xyz = Vector3d(400.0, 400.0, 400.0);
+	kv_xyz = Vector3d(100.0, 100.0, 100.0);
+	kp_ori_xyz = Vector3d(200.0, 200.0, 200.0);
+	kv_ori_xyz = Vector3d(30.0, 30.0, 30.0);
 
-	// Desired robot states
-	ee_pos_desired = Vector3d(0.7, 0.0, 0.427);
+	pose_task->setPosControlGains(kp_xyz, kv_xyz);
+	pose_task->setOriControlGains(kp_ori_xyz, kv_ori_xyz);
+	joint_task->setGains(50, 14, 0);
+
+	// Set Goals
+	ee_pos_desired = ee_pos_init;
+	ee_vel_desired = ee_vel_init;
+	ee_ori_desired = ee_ori_init;
+	q_desired = robot_q_init;
+
+	// Set tasks
 	pose_task->setGoalPosition(ee_pos_desired);
-	ee_vel_desired = Vector3d(0.0, 0.0, 0.0);
-
-	q_desired = initial_joint_angles;
 	joint_task->setGoalPosition(q_desired);	
 
 	cout << "Entering controller loop" << endl;
-	cout << "[WAITING] ball_z - ee_z < 0.15"<< endl;
+	cout << "["<< state << "]" << endl;
 
 
 	// create a loop timer
@@ -131,6 +156,10 @@ int main() {
 	while (runloop) {
 		timer.waitForNextLoop();
 		const double time = timer.elapsedSimTime();
+
+		// update ball
+		ball_position = redis_client.getEigen(BALL_POSITION_KEY);
+		ball_velocity = redis_client.getEigen(BALL_VELOCITY_KEY);
 
 		// update robot 
 		robot->setQ(redis_client.getEigen(JOINT_ANGLES_KEY));
@@ -149,16 +178,6 @@ int main() {
 		ee_forces = pose_task->getSensedForceControlWorldFrame();
 		ee_moments = pose_task->getSensedMomentControlWorldFrame();
 
-		// ball position and velocity
-		ball_position = redis_client.getEigen(BALL_POSITION_KEY);
-		ball_velocity = redis_client.getEigen(BALL_VELOCITY_KEY);
-
-		// if (abs(ee_forces(2)) > 0.0000001) {
-		// 	cout << ee_forces(2) << endl;
-		// }
-		// cout << (ee_pos.transpose()-ee_pos_desired.transpose()).norm() << endl;
-		// cout << "ball" << ball_position.transpose() << " " << ball_velocity.transpose() << endl;
-		
 		if (state == WAITING) {
 			// update task model 
 
@@ -190,6 +209,7 @@ int main() {
 				ball_vel_des = ball_velocity;
 
 				state = MOTION_UP;
+				cout << "["<< state << "]" << endl;
 			}
 		} else if (state == MOTION_UP) {
 			// update task model
@@ -201,7 +221,6 @@ int main() {
 
 			if (ball_velocity(2) < .1) {
 				cout << "Motion Up to Motion Down" << endl;
-				cout << "[DOWN] ee_z- ee_des_z < 0.1" << abs(ee_pos(2) - ee_pos_desired(2)) <<endl;
 
 				// clear values for next motion
 				pose_task->reInitializeTask();
@@ -214,17 +233,21 @@ int main() {
 				pose_task->setPosControlGains(kp_xyz, kv_xyz);
 				pose_task->setOriControlGains(kp_ori_xyz, kv_ori_xyz);
 
+				ee_pos_desired = ee_pos_init;
 				ee_vel_desired << 0, 0, -ball_vel_des(2);
+				ee_ori_desired = ee_ori_init;
+				q_desired = robot_q_init;
 
 				// pose_task->disableInternalOtg();
 				cout << "ee vel: " << ee_vel_desired.transpose() << endl;
 
 				pose_task->setGoalPosition(ee_pos_desired);
 				pose_task->setGoalLinearVelocity(ee_vel_desired);
-				pose_task->setGoalOrientation(ee_init_ori);
+				pose_task->setGoalOrientation(ee_ori_desired);
 				joint_task->setGoalPosition(q_desired);
 
 				state = MOTION_DOWN;
+				cout << "["<< state << "]" << endl;
 			}	
 				
 		} else if (state == MOTION_DOWN) {
@@ -242,13 +265,17 @@ int main() {
 				joint_task->reInitializeTask();
 				cout << "EE pos des: " << ee_pos_desired.transpose() << endl;
 
-				q_desired = robot_q;
+				ee_pos_desired = ee_pos_init;
+				ee_vel_desired = ee_vel_init;
+				ee_ori_desired = ee_ori_init;
+				q_desired = robot_q_init;
 
 				pose_task->setGoalPosition(ee_pos_desired);
-				pose_task->setGoalOrientation(ee_init_ori);
+				pose_task->setGoalOrientation(ee_ori_desired);
 				joint_task->setGoalPosition(q_desired);
 
 				state = WAITING;
+				cout << "["<< state << "]" << endl;
 			}
 		}
 
