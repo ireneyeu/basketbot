@@ -1,293 +1,268 @@
-// some standard library includes
-#include <math.h>
+/**
+ * @file basketbot.cpp
+ * @brief Controller file
+ * 
+ */
 
-#include <iostream>
-#include <mutex>
-#include <string>
-#include <thread>
-
-// sai main libraries includes
-#include "SaiModel.h"
-
-// sai utilities from sai-common
-#include "timer/LoopTimer.h"
-#include "redis/RedisClient.h"
-
-// redis keys
-#include "redis_keys.h"
-
-// for handling ctrl+c and interruptions properly
-#include <signal.h>
-bool runloop = true;
-void sighandler(int) { runloop = false; }
-
-// namespaces for compactness of code
-using namespace std;
-using namespace Eigen;
-
-// config file names and object names
-const string robot_file = "${BASKETBOT_URDF_FOLDER}/panda/panda_arm_box.urdf";
-
-int main(int argc, char** argv) {
-    SaiModel::URDF_FOLDERS["BASKETBOT_URDF_FOLDER"] = string(BASKETBOT_URDF_FOLDER);
-
-    // check for command line arguments
-    if (argc != 2) {
-        cout << "Incorrect number of command line arguments" << endl;
-        cout << "Expected usage: ./{basketbot} {task_number}" << endl;
-        return 1;
-    }
-    // convert char to int, check for correct controller number input
-    string arg = argv[1];
-    int controller_number;
-    try {
-        size_t pos;
-        controller_number = stoi(arg, &pos);
-        if (pos < arg.size()) {
-            cerr << "Trailing characters after number: " << arg << '\n';
-            return 1;
-        }
-        else if (controller_number < 1 || controller_number > 4) {
-            cout << "Incorrect controller number" << endl;
-            return 1;
-        }
-    } catch (invalid_argument const &ex) {
-        cerr << "Invalid number: " << arg << '\n';
-        return 1;
-    } catch (out_of_range const &ex) {
-        cerr << "Number out of range: " << arg << '\n';
-        return 1;
-    }
-
-    // set up signal handler
-    signal(SIGABRT, &sighandler);
-    signal(SIGTERM, &sighandler);
-    signal(SIGINT, &sighandler);
-
-    // load robots
-    auto robot = new SaiModel::SaiModel(robot_file);
-
-    // prepare controller
-	int dof = robot->dof();
-	const string link_name = "link7";
-	const Vector3d pos_in_link = Vector3d(0, 0, 0.10);
-	VectorXd control_torques = VectorXd::Zero(dof);
-
-	// model quantities for operational space control
-	MatrixXd Jv = MatrixXd::Zero(3,dof);
-	MatrixXd Lambda = MatrixXd::Zero(3,3);
-	MatrixXd J_bar = MatrixXd::Zero(dof,3);
-	MatrixXd N = MatrixXd::Zero(dof,dof);
-
-	Jv = robot->Jv(link_name, pos_in_link);
-	Lambda = robot->taskInertiaMatrix(Jv);
-	J_bar = robot->dynConsistentInverseJacobian(Jv);
-	N = robot->nullspaceMatrix(Jv);
-
-    // flag for enabling gravity compensation
-    bool gravity_comp_enabled = false;
-
-    // start redis client
-    auto redis_client = SaiCommon::RedisClient();
-    redis_client.connect();
-
-    // setup send and receive groups
-    VectorXd robot_q = redis_client.getEigen(JOINT_ANGLES_KEY);
-    VectorXd robot_dq = redis_client.getEigen(JOINT_VELOCITIES_KEY);
-    redis_client.addToReceiveGroup(JOINT_ANGLES_KEY, robot_q);
-    redis_client.addToReceiveGroup(JOINT_VELOCITIES_KEY, robot_dq);
-
-    redis_client.addToSendGroup(JOINT_TORQUES_COMMANDED_KEY, control_torques);
-    redis_client.addToSendGroup(GRAVITY_COMP_ENABLED_KEY, gravity_comp_enabled);
-
-    redis_client.receiveAllFromGroup();
-    redis_client.sendAllFromGroup();
-
-    // update robot model from simulation configuration
-    robot->setQ(robot_q);
-    robot->setDq(robot_dq);
-    robot->updateModel();
-
-    // record initial configuration
-    VectorXd initial_q = robot->q();
-
-    // create a loop timer
-    const double control_freq = 1000;
-    SaiCommon::LoopTimer timer(control_freq);
-
-    const string TIME_KEY = "sai::time"; //Time key for redis
-    const string EE_X_KEY = "sai::ee_x"; //End effector position key for redis
-    while (runloop) {
-        // wait for next scheduled loop
-        timer.waitForNextLoop();
-        double time = timer.elapsedTime();
-
-        // read robot state from redis
-        redis_client.receiveAllFromGroup();
-        robot->setQ(robot_q);
-        robot->setDq(robot_dq);
-        robot->updateModel();
-
-        // **********************
-        // WRITE YOUR CODE AFTER
-        // **********************
-        redis_client.set(TIME_KEY, to_string(time)); // Send time to redis
-        redis_client.setEigen(EE_X_KEY, robot->position(link_name, pos_in_link).transpose()); // Send end effector position to redis
-
-        // ---------------------------  question 1 ---------------------------------------
-        if(controller_number == 1) {
-            VectorXd q_desired (dof);
-            q_desired << robot_q;
-            q_desired(6) = 0.1;
-            MatrixXd Kp = 400.0*MatrixXd::Identity(dof,dof);
-            Kp(dof - 1, dof - 1) = 50.0;
-            MatrixXd Kv = 50.0*MatrixXd::Identity(dof,dof);
-            Kv(dof - 1, dof - 1) = -0.167;// if  simviz uses 0.1 Kv7 = -0.168; simviz 1.0 -> Kv7 = -0.09
-
-
-            cout<< robot_q(6) << endl;
-            // control_torques.setZero();
-            control_torques =  (-Kp * (robot_q - q_desired) - Kv * (robot_dq)) + robot->coriolisForce() + robot->jointGravityVector();
-        }
-
-        // ---------------------------  question 2 ---------------------------------------
-        else if(controller_number == 2) {
-            Vector3d ee_x;
-            ee_x = robot->position(link_name, pos_in_link);
-            Vector3d ee_xdesired;
-            ee_xdesired << 0.3, 0.1, 0.5;
-
-            Vector3d ee_v;
-            ee_v = robot->linearVelocity(link_name, pos_in_link);
-
-            Jv = robot->Jv(link_name, pos_in_link);
-        	Lambda = robot->taskInertiaMatrix(Jv);
-
-            MatrixXd F = MatrixXd::Zero(3,1);
-            float kp = 200.0;
-            float kv = 27.0; // 50.0 is overdamped, 5 is underdamped
-            F = Lambda*(-kp*(ee_x - ee_xdesired) - kv*(ee_v));
-            
-            cout << ee_x.transpose() << endl;
-
-            // control_torques.setZero();
-            // Part A
-            control_torques = Jv.transpose()*F + robot->jointGravityVector(); 
-
-            // Part C
-            MatrixXd Kv = 25.0 * MatrixXd::Identity(dof,dof);
-            control_torques = control_torques - Kv * (robot_dq); 
-
-            // Part D
-            N = robot->nullspaceMatrix(Jv);
-            Kv = 25.0* MatrixXd::Identity(dof,dof);
-            control_torques = Jv.transpose()*F + robot->jointGravityVector() - N.transpose() * robot->M() * (Kv * (robot_dq));
-        }
-
-        // ---------------------------  question 3 ---------------------------------------
-        else if(controller_number == 3) {
-            Vector3d ee_x;
-            ee_x = robot->position(link_name, pos_in_link);
-            Vector3d ee_xdesired;
-            ee_xdesired << 0.3, 0.1, 0.5;
-
-            Vector3d ee_v;
-            ee_v = robot->linearVelocity(link_name, pos_in_link);
-
-            Jv = robot->Jv(link_name, pos_in_link);
-            Lambda = robot->taskInertiaMatrix(Jv);
-            J_bar = robot->dynConsistentInverseJacobian(Jv);
-
-            Vector3d p;
-            p = J_bar.transpose() * robot->jointGravityVector();
-
-            MatrixXd F = MatrixXd::Zero(3,1);
-            float kp = 200.0;
-            float kv = 27.0; 
-            F = Lambda*(-kp*(ee_x - ee_xdesired) - kv*(ee_v)) + p;
-
-            N = robot->nullspaceMatrix(Jv);
-            MatrixXd Kv = 25.0* MatrixXd::Identity(dof,dof);
-            control_torques = Jv.transpose()*F - N.transpose() * robot->M() * (Kv * (robot_dq));
-
-
-            cout << ee_x.transpose() << endl;
-            // control_torques.setZero();
-        }
-
-        // ---------------------------  question 4 ---------------------------------------
-        else if(controller_number == 4) {
-            Vector3d ee_x;
-            ee_x = robot->position(link_name, pos_in_link);
-            Vector3d ee_xdesired;
-            ee_xdesired << 0.3 + 0.1 * sin(M_PI * time), 0.1 + 0.1 * cos(M_PI * time), 0.5;
-
-            Vector3d ee_v;
-            ee_v = robot->linearVelocity(link_name, pos_in_link);
-
-            Jv = robot->Jv(link_name, pos_in_link);
-            Lambda = robot->taskInertiaMatrix(Jv);
-            J_bar = robot->dynConsistentInverseJacobian(Jv);
-
-            Vector3d p;
-            p = J_bar.transpose() * robot->jointGravityVector();
-
-            MatrixXd F = MatrixXd::Zero(3,1);
-            float kp = 200.0;
-            float kv = 27.0; 
-            F = Lambda*(-kp*(ee_x - ee_xdesired) - kv*(ee_v)) + p;
-
-            N = robot->nullspaceMatrix(Jv);
-            MatrixXd Kv = 25.0* MatrixXd::Identity(dof,dof);
-
-            // Part i.
-            control_torques = Jv.transpose()*F - N.transpose() * robot->M() * (Kv * (robot_dq));
-
-            // Part ii.
-            Lambda = MatrixXd::Identity(3,3);
-            F = Lambda*(-kp*(ee_x - ee_xdesired) - kv*(ee_v)) + p;
-
-            control_torques = Jv.transpose()*F - N.transpose() * robot->M() * (Kv * (robot_dq));
-
-            // Part iii.
-            Lambda = robot->taskInertiaMatrix(Jv);
-            F = Lambda*(-kp*(ee_x - ee_xdesired) - kv*(ee_v)) + p;
-            VectorXd q_desired (dof);
-            q_desired << 0,0,0,0,0,0,0;
-            MatrixXd KpJ = 400.0*MatrixXd::Identity(dof,dof);
-            // KpJ(1,1) = 0.01;
-            // KpJ(2,2) = 1.0;
-            // KpJ(3,3) = 0.01;
-            // KpJ(4,4) = 1.0;
-            // KpJ(5,5) = 0.01;
-            MatrixXd KvJ = 50.0*MatrixXd::Identity(dof,dof);
-            control_torques = Jv.transpose()*F + N.transpose() * robot->M() * (-KpJ * (robot_q - q_desired) - KvJ * (robot_dq));
-
-            // Part iv.
-            control_torques = control_torques + N.transpose() * (robot->M() * (-KpJ * (robot_q - q_desired) - KvJ * (robot_dq)) + robot->jointGravityVector() );
-
-
-            cout << ee_x.transpose() << endl;
-            // cout << robot_q.transpose() << endl;
-
-            // control_torques.setZero();
-        }
-
-        // **********************
-        // WRITE YOUR CODE BEFORE
-        // **********************
-
-        // send to redis
-        redis_client.sendAllFromGroup();
-    }
-
-    control_torques.setZero();
-    gravity_comp_enabled = true;
-    redis_client.sendAllFromGroup();
-
-    timer.stop();
-    cout << "\nControl loop timer stats:\n";
-    timer.printInfoPostRun();
-
-    return 0;
-}
+ #include <SaiModel.h>
+ #include "SaiPrimitives.h"
+ #include "redis/RedisClient.h"
+ #include "timer/LoopTimer.h"
+ 
+ #include <iostream>
+ #include <string>
+ 
+ using namespace std;
+ using namespace Eigen;
+ using namespace SaiPrimitives;
+ 
+ #include <signal.h>
+ bool runloop = false;
+ void sighandler(int){runloop = false;}
+ 
+ #include "redis_keys.h"
+ 
+ // States 
+ enum State {
+     WAITING = 0,
+     MOTION_UP,
+     MOTION_DOWN,
+ };
+ 
+ int main() {
+     // Location of URDF files specifying world and robot information
+     static const string robot_file = string(BASKETBOT_URDF_FOLDER) + "/panda/panda_arm_box.urdf";
+ 
+     // initial state 
+     int state = WAITING;
+     string controller_status = "1";
+     
+     // start redis client
+     auto redis_client = SaiCommon::RedisClient();
+     redis_client.connect();
+ 
+     // set up signal handler
+     signal(SIGABRT, &sighandler);
+     signal(SIGTERM, &sighandler);
+     signal(SIGINT, &sighandler);
+ 
+     // load robots, read current state and update the model
+     auto robot = std::make_shared<SaiModel::SaiModel>(robot_file, false);
+     robot->setQ(redis_client.getEigen(JOINT_ANGLES_KEY));
+     robot->setDq(redis_client.getEigen(JOINT_VELOCITIES_KEY));
+     robot->updateModel();
+ 
+     // prepare controller
+     int dof = robot->dof();
+     VectorXd command_torques = VectorXd::Zero(dof);  // panda + gripper torques 
+     MatrixXd N_prec = MatrixXd::Identity(dof, dof);
+ 
+     // arm task
+     // const string control_link = "link7";
+     const string control_link = "end-effector";
+     const Vector3d control_point = Vector3d(0.20, 0, 0.02); // NEED TO CHECK CONTROL POINT
+     Affine3d compliant_frame = Affine3d::Identity();
+     compliant_frame.translation() = control_point;
+     auto pose_task = std::make_shared<SaiPrimitives::MotionForceTask>(robot, control_link, compliant_frame);
+     VectorXd kp_xyz = Vector3d(400.0, 400.0, 400.0);
+     VectorXd kv_xyz = Vector3d(100.0, 100.0, 100.0);
+     pose_task->setPosControlGains(kp_xyz, kv_xyz);
+     VectorXd kp_ori_xyz = Vector3d(200.0, 200.0, 200.0);
+     VectorXd kv_ori_xyz = Vector3d(30.0, 30.0, 30.0);
+     pose_task->setOriControlGains(kp_ori_xyz, kv_ori_xyz);
+ 
+     // Robot states
+     Vector3d ee_pos;
+     Vector3d ee_vel;
+     Matrix3d ee_ori;
+     VectorXd robot_q(dof);
+     VectorXd robot_dq(dof);
+     Vector3d ee_forces;
+     Vector3d ee_moments;
+     float z_contact = 0.427;
+     int trigger = 0;
+     float prev_vel;
+     float curr_vel;
+ 
+ 
+     // Desired states
+     Vector3d ee_pos_desired;
+     Vector3d ee_vel_desired;
+     Matrix3d ee_ori_desired;
+     VectorXd q_desired(dof);
+ 
+ 
+     // joint task
+     auto joint_task = std::make_shared<SaiPrimitives::JointTask>(robot);
+     joint_task->setGains(50, 14, 0);
+ 
+     // VectorXd q_desired(dof);
+     // q_desired.head(7) << 0.0, 30.0, 0.0, -60.0, 0.0, 90.0, 45.0;
+     // q_desired.head(7) *= M_PI / 180.0;
+     // // q_desired.tail(2) << 0.04, -0.04;
+     // joint_task->setGoalPosition(q_desired);
+ 
+     
+     // Initial robot state
+     Vector3d initial_ee_pos = robot->position(control_link, control_point);
+     Matrix3d ee_init_ori;
+     ee_init_ori << 1, 0, 0,
+                     0, -1, 0,
+                     0, 0, -1;
+     VectorXd initial_joint_angles = robot->q();
+ 
+     cout << "Initial end-effector position: " << initial_ee_pos.transpose() << endl;
+ 
+     // Desired robot states
+     ee_pos_desired = Vector3d(0.7, 0.0, 0.427);
+     pose_task->setGoalPosition(ee_pos_desired);
+ 
+     q_desired = initial_joint_angles;
+     joint_task->setGoalPosition(q_desired);	
+ 
+     cout << "Entering controller loop" << endl;
+ 
+     // Ball information
+     Vector3d ball_position;
+     Vector3d ball_velocity;
+ 
+     // create a loop timer
+     runloop = true;
+     double control_freq = 1000; // should be 1000
+     SaiCommon::LoopTimer timer(control_freq, 1e6);
+ 
+     while (runloop) {
+         timer.waitForNextLoop();
+         const double time = timer.elapsedSimTime();
+ 
+         // update robot 
+         robot->setQ(redis_client.getEigen(JOINT_ANGLES_KEY));
+         robot->setDq(redis_client.getEigen(JOINT_VELOCITIES_KEY));
+         robot->updateModel();
+ 
+         // robot states
+         ee_pos = robot->position(control_link, control_point);
+         ee_vel = robot->linearVelocity(control_link, control_point);
+         ee_ori = robot->rotation(control_link);
+         robot_q = robot->q();
+         robot_dq = robot->dq();
+ 
+         // forces and moments
+         pose_task->updateSensedForceAndMoment(redis_client.getEigen(EE_FORCES_KEY), redis_client.getEigen(EE_MOMENTS_KEY));
+         ee_forces = pose_task->getSensedForceControlWorldFrame();
+         ee_moments = pose_task->getSensedMomentControlWorldFrame();
+ 
+         // ball position and velocity
+         ball_position = redis_client.getEigen(BALL_POSITION_KEY);
+         ball_velocity = redis_client.getEigen(BALL_VELOCITY_KEY);
+ 
+         // if (abs(ee_forces(2)) > 0.0000001) {
+         // 	cout << ee_forces(2) << endl;
+         // }
+         // cout << (ee_pos.transpose()-ee_pos_desired.transpose()).norm() << endl;
+         // cout << "ball" << ball_position.transpose() << " " << ball_velocity.transpose() << endl;
+         
+         if (state == WAITING) {
+             // update task model 
+             N_prec.setIdentity();
+             pose_task->updateTaskModel(N_prec);
+             joint_task->updateTaskModel(pose_task->getTaskAndPreviousNullspace());
+ 
+             command_torques = pose_task->computeTorques() + joint_task->computeTorques();
+ 
+             if (abs(ee_forces(2)) > 0.0001) {
+                 cout << "Contact Detected" << endl;
+                 cout << "WAITING TO MOVING UP" << endl;
+                 z_contact = ee_pos(2);
+                 cout << ee_forces(2) << endl;
+ 
+                 // compliant in Z direction
+                 kp_xyz(2) = 0.0;
+                 kv_xyz(2) = 0.0;
+                 // kp_ori_xyz(2) = 0.0;
+                 pose_task->setPosControlGains(kp_xyz, kv_xyz);
+                 // pose_task->setOriControlGains(kp_ori_xyz, kv_ori_xyz);
+ 
+                 state = MOTION_UP;
+             }
+         } else if (state == MOTION_UP) {
+             // update task model
+             N_prec.setIdentity();
+             pose_task->updateTaskModel(N_prec);
+             joint_task->updateTaskModel(pose_task->getTaskAndPreviousNullspace());
+ 
+             command_torques = pose_task->computeTorques() + joint_task->computeTorques();
+ 
+             if (trigger == 0) {
+                 trigger += 1;
+                 prev_vel = ee_vel(2);
+             } else if (trigger == 1) {
+                 curr_vel = ee_vel(2);
+                 if (curr_vel - prev_vel < 0 && curr_vel < 0.1) {
+                     cout << "Motion Up to Motion Down" << endl;
+                     cout << endl;
+                     trigger = 0;
+ 
+                     // clear values for next motion
+                     pose_task->reInitializeTask();
+                     joint_task->reInitializeTask();
+ 
+                     // set up new gains
+                     kp_xyz(2) = 400.0;
+                     kv_xyz(2) = 100.0;
+                     kp_ori_xyz(2) = 200.0;
+                     pose_task->setPosControlGains(kp_xyz, kv_xyz);
+                     pose_task->setOriControlGains(kp_ori_xyz, kv_ori_xyz);
+ 
+                     ee_vel_desired << 0, 0, -3.14;
+ 
+                     pose_task->disableInternalOtg();
+                     cout << "ee_pos_desired: " << ee_pos_desired.transpose() << endl;
+ 
+                     pose_task->setGoalPosition(ee_pos_desired);
+                     pose_task->setGoalLinearVelocity(ee_vel_desired);
+                     pose_task->setGoalOrientation(ee_init_ori);
+                     joint_task->setGoalPosition(q_desired);
+ 
+                     state = MOTION_DOWN;
+                 }
+                 prev_vel = ee_vel(2);
+             }			
+                 
+         } else if (state == MOTION_DOWN) {
+             // update task model
+             N_prec.setIdentity();
+             pose_task->updateTaskModel(N_prec);
+             joint_task->updateTaskModel(pose_task->getTaskAndPreviousNullspace());
+ 
+             command_torques = pose_task->computeTorques() + joint_task->computeTorques();
+ 
+             if ((ee_pos(2) - ee_pos_desired(2)) < 0) {
+                 cout << "Motion Down to Waiting" << endl;
+                 pose_task->reInitializeTask();
+                 joint_task->reInitializeTask();
+                 cout << "EE pos des: " << ee_pos_desired.transpose() << endl;
+ 
+                 q_desired = robot_q;
+ 
+                 pose_task->enableInternalOtgAccelerationLimited(0.3, 1.0, M_PI/3, M_PI);
+                 pose_task->setGoalPosition(ee_pos_desired);
+                 pose_task->setGoalOrientation(ee_init_ori);
+                 joint_task->setGoalPosition(q_desired);
+ 
+                 state = WAITING;
+             }
+         }
+ 
+         // execute redis write callback
+         redis_client.setEigen(JOINT_TORQUES_COMMANDED_KEY, command_torques);
+     }
+ 
+     timer.stop();
+     cout << "\nSimulation loop timer stats:\n";
+     timer.printInfoPostRun();
+     redis_client.setEigen(JOINT_TORQUES_COMMANDED_KEY, 0 * command_torques);  // back to floating
+ 
+     return 0;
+ }
+ 

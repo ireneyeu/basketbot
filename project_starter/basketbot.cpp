@@ -54,7 +54,7 @@ int main() {
 
 	// prepare controller
 	int dof = robot->dof();
-	VectorXd command_torques = VectorXd::Zero(dof);  // panda + gripper torques 
+	VectorXd command_torques = VectorXd::Zero(dof);  
 	MatrixXd N_prec = MatrixXd::Identity(dof, dof);
 
 	// arm task
@@ -79,10 +79,11 @@ int main() {
 	VectorXd robot_dq(dof);
 	Vector3d ee_forces;
 	Vector3d ee_moments;
-	float z_contact = 0.427;
-	int trigger = 0;
-	float prev_vel;
-	float curr_vel;
+
+	// Ball information
+	Vector3d ball_position;
+	Vector3d ball_velocity;
+	Vector3d ball_vel_des;
 
 
 	// Desired states
@@ -95,13 +96,6 @@ int main() {
 	// joint task
 	auto joint_task = std::make_shared<SaiPrimitives::JointTask>(robot);
 	joint_task->setGains(50, 14, 0);
-
-	// VectorXd q_desired(dof);
-	// q_desired.head(7) << 0.0, 30.0, 0.0, -60.0, 0.0, 90.0, 45.0;
-	// q_desired.head(7) *= M_PI / 180.0;
-	// // q_desired.tail(2) << 0.04, -0.04;
-	// joint_task->setGoalPosition(q_desired);
-
 	
 	// Initial robot state
 	Vector3d initial_ee_pos = robot->position(control_link, control_point);
@@ -111,25 +105,28 @@ int main() {
 					0, 0, -1;
 	VectorXd initial_joint_angles = robot->q();
 
+
 	cout << "Initial end-effector position: " << initial_ee_pos.transpose() << endl;
 
 	// Desired robot states
 	ee_pos_desired = Vector3d(0.7, 0.0, 0.427);
 	pose_task->setGoalPosition(ee_pos_desired);
+	ee_vel_desired = Vector3d(0.0, 0.0, 0.0);
 
 	q_desired = initial_joint_angles;
 	joint_task->setGoalPosition(q_desired);	
 
 	cout << "Entering controller loop" << endl;
+	cout << "[WAITING] ball_z - ee_z < 0.15"<< endl;
 
-	// Ball information
-	Vector3d ball_position;
-	Vector3d ball_velocity;
 
 	// create a loop timer
 	runloop = true;
 	double control_freq = 1000; // should be 1000
 	SaiCommon::LoopTimer timer(control_freq, 1e6);
+
+	pose_task->enableInternalOtgAccelerationLimited(4.0, 4.0, M_PI/3, M_PI);
+
 
 	while (runloop) {
 		timer.waitForNextLoop();
@@ -159,29 +156,38 @@ int main() {
 		// if (abs(ee_forces(2)) > 0.0000001) {
 		// 	cout << ee_forces(2) << endl;
 		// }
-		// cout << ee_pos.transpose() << endl;
-		cout << "ball" << ball_position.transpose() << " " << ball_velocity.transpose() << endl;
+		// cout << (ee_pos.transpose()-ee_pos_desired.transpose()).norm() << endl;
+		// cout << "ball" << ball_position.transpose() << " " << ball_velocity.transpose() << endl;
 		
 		if (state == WAITING) {
 			// update task model 
+
+			ee_pos_desired(0) = ball_position(0) ;
+			ee_pos_desired(1) = ball_position(1) ;
+			pose_task->setGoalPosition(ee_pos_desired);
+
+			ee_vel_desired(0) = ball_velocity(0);
+			ee_vel_desired(1) = ball_velocity(1);
+			pose_task->setGoalLinearVelocity(ee_vel_desired);
+
 			N_prec.setIdentity();
 			pose_task->updateTaskModel(N_prec);
 			joint_task->updateTaskModel(pose_task->getTaskAndPreviousNullspace());
 
 			command_torques = pose_task->computeTorques() + joint_task->computeTorques();
 
-			if (abs(ee_forces(2)) > 0.0001) {
-				cout << "Contact Detected" << endl;
+			if (abs(ball_position(2) - ee_pos(2)) < 0.15) {
+				cout << "Ball Detected" << endl;
 				cout << "WAITING TO MOVING UP" << endl;
-				z_contact = ee_pos(2);
-				cout << ee_forces(2) << endl;
 
 				// compliant in Z direction
-				kp_xyz(2) = 0.0;
-				kv_xyz(2) = 0.0;
-				kp_ori_xyz(2) = 0.0;
+				kp_xyz(2) = 10.0;
+				kv_xyz(2) = 10.0;
+				// kp_ori_xyz(2) = 0.0;
 				pose_task->setPosControlGains(kp_xyz, kv_xyz);
-				pose_task->setOriControlGains(kp_ori_xyz, kv_ori_xyz);
+				// pose_task->setOriControlGains(kp_ori_xyz, kv_ori_xyz);
+
+				ball_vel_des = ball_velocity;
 
 				state = MOTION_UP;
 			}
@@ -193,40 +199,33 @@ int main() {
 
 			command_torques = pose_task->computeTorques() + joint_task->computeTorques();
 
-			if (trigger == 0) {
-				trigger += 1;
-				prev_vel = ee_vel(2);
-			} else if (trigger == 1) {
-				curr_vel = ee_vel(2);
-				if (curr_vel - prev_vel < 0 && curr_vel < 0.1) {
-					cout << "Motion Up to Motion Down" << endl;
-					trigger = 0;
+			if (ball_velocity(2) < .1) {
+				cout << "Motion Up to Motion Down" << endl;
+				cout << "[DOWN] ee_z- ee_des_z < 0.1" << abs(ee_pos(2) - ee_pos_desired(2)) <<endl;
 
-					// clear values for next motion
-					pose_task->reInitializeTask();
-					joint_task->reInitializeTask();
+				// clear values for next motion
+				pose_task->reInitializeTask();
+				joint_task->reInitializeTask();
 
-					// set up new gains
-					kp_xyz(2) = 400.0;
-					kv_xyz(2) = 100.0;
-					kp_ori_xyz(2) = 200.0;
-					pose_task->setPosControlGains(kp_xyz, kv_xyz);
-					pose_task->setOriControlGains(kp_ori_xyz, kv_ori_xyz);
+				// set up new gains
+				kp_xyz(2) = 400.0;
+				kv_xyz(2) = 100.0;
+				kp_ori_xyz(2) = 200.0;
+				pose_task->setPosControlGains(kp_xyz, kv_xyz);
+				pose_task->setOriControlGains(kp_ori_xyz, kv_ori_xyz);
 
-					ee_vel_desired << 0, 0, -3.14;
+				ee_vel_desired << 0, 0, -ball_vel_des(2);
 
-					pose_task->disableInternalOtg();
-					cout << "ee_pos_desired: " << ee_pos_desired.transpose() << endl;
+				// pose_task->disableInternalOtg();
+				cout << "ee vel: " << ee_vel_desired.transpose() << endl;
 
-					pose_task->setGoalPosition(ee_pos_desired);
-					pose_task->setGoalLinearVelocity(ee_vel_desired);
-					pose_task->setGoalOrientation(ee_init_ori);
-					joint_task->setGoalPosition(q_desired);
+				pose_task->setGoalPosition(ee_pos_desired);
+				pose_task->setGoalLinearVelocity(ee_vel_desired);
+				pose_task->setGoalOrientation(ee_init_ori);
+				joint_task->setGoalPosition(q_desired);
 
-					state = MOTION_DOWN;
-				}
-				prev_vel = ee_vel(2);
-			}			
+				state = MOTION_DOWN;
+			}	
 				
 		} else if (state == MOTION_DOWN) {
 			// update task model
@@ -235,16 +234,18 @@ int main() {
 			joint_task->updateTaskModel(pose_task->getTaskAndPreviousNullspace());
 
 			command_torques = pose_task->computeTorques() + joint_task->computeTorques();
+			// cout << abs(ee_pos(2) - ee_pos_desired(2)) << endl;
 
-			if ((ee_pos - ee_pos_desired).norm() < 1e-3) {
+			if (abs(ee_pos(2) - ee_pos_desired(2)) < 0.05) {
 				cout << "Motion Down to Waiting" << endl;
 				pose_task->reInitializeTask();
 				joint_task->reInitializeTask();
+				cout << "EE pos des: " << ee_pos_desired.transpose() << endl;
 
 				q_desired = robot_q;
 
 				pose_task->setGoalPosition(ee_pos_desired);
-				pose_task->setGoalOrientation(ee_ori);
+				pose_task->setGoalOrientation(ee_init_ori);
 				joint_task->setGoalPosition(q_desired);
 
 				state = WAITING;
