@@ -55,6 +55,12 @@ Vector3d sensed_force;
 Vector3d sensed_moment;
 double cutoff_freq = 2.0;
 
+// Bal Information
+Vector3d ball_position;
+Vector3d ball_velocity;
+Vector3d ball_spin;
+Affine3d ball_pose = Affine3d::Identity();
+
 // simulation thread
 void simulation(std::shared_ptr<SaiSimulation::SaiSimulation> sim);
 
@@ -97,12 +103,11 @@ int main() {
 		object_velocities.push_back(sim->getObjectVelocity(object_names[i]));
 	}
 
-	// set initial ball velocity
-	Vector3d ball_velocity(0.0, 0.0, 2.8);  // Example: 1 m/s in X
-	Vector3d ball_spin(0.0, 0.0, 0.0);      // No initial spin
-
-	Vector3d ball_position(0.65, 0.0, 0.0);
-	Affine3d ball_pose = Affine3d::Identity();
+	// set ball information
+	ball_position<< 0.65, 0.0, 0.0;
+	ball_velocity << 0.0, 0.0, 2.8;
+	ball_spin << 0.0, 0.0, 0.0;
+	ball_pose = Affine3d::Identity();
 	ball_pose.translation() = ball_position;
 
 	sim->setObjectPose("BALL", ball_pose);
@@ -127,6 +132,8 @@ int main() {
 	redis_client.setEigen(JOINT_TORQUES_COMMANDED_KEY, 0 * robot->q());
 	redis_client.setEigen(EE_FORCES_KEY, Vector3d::Zero());
 	redis_client.setEigen(EE_MOMENTS_KEY, Vector3d::Zero());
+	redis_client.setEigen(BALL_POSITION_KEY, ball_position);
+	redis_client.setEigen(BALL_VELOCITY_KEY, ball_velocity);
 
 	// start simulation thread
 	thread sim_thread(simulation, sim);
@@ -166,7 +173,7 @@ void simulation(std::shared_ptr<SaiSimulation::SaiSimulation> sim) {
 	double sim_freq = 2000; // should be 2000
 	SaiCommon::LoopTimer timer(sim_freq);
 
-	sim->setTimestep(1.0 / sim_freq);
+	sim->setTimestep(0.1 / sim_freq); // 0.1 is 10 times slower sim, 1.0 is real time
 	sim->enableGravityCompensation(true);
 	sim->enableJointLimits(robot_name);
 
@@ -181,12 +188,6 @@ void simulation(std::shared_ptr<SaiSimulation::SaiSimulation> sim) {
 		redis_client.setEigen(JOINT_ANGLES_KEY, sim->getJointPositions(robot_name));
 		redis_client.setEigen(JOINT_VELOCITIES_KEY, sim->getJointVelocities(robot_name));
 
-		// force sensor
-		sensed_force = sim->getSensedForce(robot_name, link_name);
-		sensed_moment = sim->getSensedMoment(robot_name, link_name);
-		redis_client.setEigen(EE_FORCES_KEY, sensed_force);
-		redis_client.setEigen(EE_MOMENTS_KEY, sensed_moment);
-
 		// update object information 
 		{
 			lock_guard<mutex> lock(mutex_update);
@@ -194,7 +195,20 @@ void simulation(std::shared_ptr<SaiSimulation::SaiSimulation> sim) {
 				object_poses[i] = sim->getObjectPose(object_names[i]);
 				object_velocities[i] = sim->getObjectVelocity(object_names[i]);
 			}
+			ball_position = sim->getObjectPose("BALL").translation();
+			ball_velocity = sim->getObjectVelocity("BALL").head(3);
+			ball_spin = sim->getObjectVelocity("BALL").tail(3);
 		}
+
+		// force sensor
+		sensed_force = sim->getSensedForce(robot_name, link_name);
+		sensed_moment = sim->getSensedMoment(robot_name, link_name);
+		redis_client.setEigen(EE_FORCES_KEY, sensed_force);
+		redis_client.setEigen(EE_MOMENTS_KEY, sensed_moment);
+
+		// ball
+		redis_client.setEigen(BALL_POSITION_KEY, ball_position);
+		redis_client.setEigen(BALL_VELOCITY_KEY, ball_velocity);
 	}
 	timer.stop();
 	cout << "\nSimulation loop timer stats:\n";

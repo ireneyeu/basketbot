@@ -67,7 +67,9 @@ int main() {
 	VectorXd kp_xyz = Vector3d(400.0, 400.0, 400.0);
 	VectorXd kv_xyz = Vector3d(100.0, 100.0, 100.0);
 	pose_task->setPosControlGains(kp_xyz, kv_xyz);
-	pose_task->setOriControlGains(200, 30, 0);
+	VectorXd kp_ori_xyz = Vector3d(200.0, 200.0, 200.0);
+	VectorXd kv_ori_xyz = Vector3d(30.0, 30.0, 30.0);
+	pose_task->setOriControlGains(kp_ori_xyz, kv_ori_xyz);
 
 	// Robot states
 	Vector3d ee_pos;
@@ -120,6 +122,10 @@ int main() {
 
 	cout << "Entering controller loop" << endl;
 
+	// Ball information
+	Vector3d ball_position;
+	Vector3d ball_velocity;
+
 	// create a loop timer
 	runloop = true;
 	double control_freq = 1000; // should be 1000
@@ -141,16 +147,20 @@ int main() {
 		robot_q = robot->q();
 		robot_dq = robot->dq();
 
+		// forces and moments
 		pose_task->updateSensedForceAndMoment(redis_client.getEigen(EE_FORCES_KEY), redis_client.getEigen(EE_MOMENTS_KEY));
-
 		ee_forces = pose_task->getSensedForceControlWorldFrame();
 		ee_moments = pose_task->getSensedMomentControlWorldFrame();
+
+		// ball position and velocity
+		ball_position = redis_client.getEigen(BALL_POSITION_KEY);
+		ball_velocity = redis_client.getEigen(BALL_VELOCITY_KEY);
 
 		// if (abs(ee_forces(2)) > 0.0000001) {
 		// 	cout << ee_forces(2) << endl;
 		// }
 		// cout << ee_pos.transpose() << endl;
-
+		cout << "ball" << ball_position.transpose() << " " << ball_velocity.transpose() << endl;
 		
 		if (state == WAITING) {
 			// update task model 
@@ -167,9 +177,11 @@ int main() {
 				cout << ee_forces(2) << endl;
 
 				// compliant in Z direction
-				kp_xyz(2) = 10.0;
-				kv_xyz(2) = 10.0;
+				kp_xyz(2) = 0.0;
+				kv_xyz(2) = 0.0;
+				kp_ori_xyz(2) = 0.0;
 				pose_task->setPosControlGains(kp_xyz, kv_xyz);
+				pose_task->setOriControlGains(kp_ori_xyz, kv_ori_xyz);
 
 				state = MOTION_UP;
 			}
@@ -180,8 +192,6 @@ int main() {
 			joint_task->updateTaskModel(pose_task->getTaskAndPreviousNullspace());
 
 			command_torques = pose_task->computeTorques() + joint_task->computeTorques();
-
-
 
 			if (trigger == 0) {
 				trigger += 1;
@@ -199,12 +209,17 @@ int main() {
 					// set up new gains
 					kp_xyz(2) = 400.0;
 					kv_xyz(2) = 100.0;
+					kp_ori_xyz(2) = 200.0;
 					pose_task->setPosControlGains(kp_xyz, kv_xyz);
+					pose_task->setOriControlGains(kp_ori_xyz, kv_ori_xyz);
 
 					ee_vel_desired << 0, 0, -3.14;
 
+					pose_task->disableInternalOtg();
+					cout << "ee_pos_desired: " << ee_pos_desired.transpose() << endl;
+
 					pose_task->setGoalPosition(ee_pos_desired);
-					// pose_task->setGoalLinearVelocity(ee_vel_desired);
+					pose_task->setGoalLinearVelocity(ee_vel_desired);
 					pose_task->setGoalOrientation(ee_init_ori);
 					joint_task->setGoalPosition(q_desired);
 
