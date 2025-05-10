@@ -24,5 +24,8 @@
  const std::string EE_FORCES_KEY = "sai::sensors::PANDA::ft_sensor::end-effector::force";
  const std::string EE_MOMENTS_KEY = "sai::sensors::PANDA::ft_sensor::end-effector::moment";
 
+ const std::string EE_POSITION_KEY = "sai::sim::PANDA::end-effector::position";
+ const std::string EE_VELOCITY_KEY = "sai::sim::PANDA::end-effector::velocity";
+
  const std::string BALL_POSITION_KEY = "sai::sim::BALL::sensors::position";
  const std::string BALL_VELOCITY_KEY = "sai::sim::BALL::sensors::velocity";

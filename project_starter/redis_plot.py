@@ -7,6 +7,8 @@ import signal
 EE_FORCES_KEY = "sai::sensors::PANDA::ft_sensor::end-effector::force"
 BALL_POSITION_KEY = "sai::sim::BALL::sensors::position"
 BALL_VELOCITY_KEY = "sai::sim::BALL::sensors::velocity"
+EE_POSITION_KEY = "sai::sim::PANDA::end-effector::position"
+EE_VELOCITY_KEY = "sai::sim::PANDA::end-effector::velocity"
 
 # Redis connection
 redis_client = redis.Redis()
@@ -23,6 +25,10 @@ BALL_Z_POSITION = []
 BALL_X_VELOCITY = []
 BALL_Y_VELOCITY = []
 BALL_Z_VELOCITY = []
+
+EE_X = []
+EE_Y = []
+EE_Z = []
 
 # Graceful shutdown on Ctrl+C
 running = True
@@ -54,6 +60,12 @@ try:
             BALL_Y_VELOCITY.append(ball_velocity[1])
             BALL_Z_VELOCITY.append(ball_velocity[2])
 
+            ee_position_redis = redis_client.get(EE_POSITION_KEY).decode("utf-8")
+            ee_position = [float(x) for x in ee_position_redis.strip('[]').split(',')]
+            EE_X.append(ee_position[0])
+            EE_Y.append(ee_position[1])
+            EE_Z.append(ee_position[2])
+
 
         except Exception as e:
             print(f"Error: {e}")
@@ -82,6 +94,9 @@ finally:
     plt.plot(BALL_X_POSITION, label='X Position', color='r')
     plt.plot(BALL_Y_POSITION, label='Y Position', color='g')
     plt.plot(BALL_Z_POSITION, label='Z Position', color='b')
+    plt.plot(EE_X, label='EE X', color='c', linestyle='--')
+    plt.plot(EE_Y, label='EE Y', color='m', linestyle='-')
+    plt.plot(EE_Z, label='EE Z', color='y', linestyle=':')
     plt.xlabel("Time [s]")
     plt.ylabel("Position [m]")
     plt.title("Ball Position")

@@ -59,7 +59,7 @@ int main() {
 
 	// arm task
 	const string control_link = "end-effector";
-	const Vector3d control_point = Vector3d(0.20, 0, 0.02); // NEED TO CHECK CONTROL POINT
+	const Vector3d control_point = Vector3d(0.20, 0, 0.13); // NEED TO CHECK CONTROL POINT
 	Affine3d compliant_frame = Affine3d::Identity();
 	compliant_frame.translation() = control_point;
 	auto pose_task = std::make_shared<SaiPrimitives::MotionForceTask>(robot, control_link, compliant_frame);
@@ -110,7 +110,7 @@ int main() {
 	// ee_ori_init = robot->rotation(control_link);
 	// robot_q_init = robot->q();
 	// robot_dq_init = robot->dq();
-	ee_pos_init << 0.7, 0.0, 0.427;
+	ee_pos_init << 0.7, 0.0, 0.32;
 	ee_vel_init = Vector3d::Zero();
 	ee_ori_init << 1, 0, 0,
 					0, -1, 0,
@@ -143,6 +143,7 @@ int main() {
 
 	cout << "Entering controller loop" << endl;
 	cout << "["<< state << "]" << endl;
+	cout << robot->position(control_link, control_point) << endl;
 
 
 	// create a loop timer
@@ -150,7 +151,7 @@ int main() {
 	double control_freq = 1000; // should be 1000
 	SaiCommon::LoopTimer timer(control_freq, 1e6);
 
-	pose_task->enableInternalOtgAccelerationLimited(4.0, 4.0, M_PI/3, M_PI);
+	pose_task->enableInternalOtgAccelerationLimited(4.0, 4.0, M_PI/3, M_PI); // OTG LIMITS STUFF
 
 
 	while (runloop) {
@@ -194,8 +195,9 @@ int main() {
 			joint_task->updateTaskModel(pose_task->getTaskAndPreviousNullspace());
 
 			command_torques = pose_task->computeTorques() + joint_task->computeTorques();
+			// cout << ball_position(2) << ", " << ee_pos(2) << endl;
 
-			if (abs(ball_position(2) - ee_pos(2)) < 0.15) {
+			if (abs(ball_position(2) - ee_pos(2)) < 0.05) {
 				cout << "Ball Detected" << endl;
 				cout << "WAITING TO MOVING UP" << endl;
 
@@ -281,6 +283,9 @@ int main() {
 
 		// execute redis write callback
 		redis_client.setEigen(JOINT_TORQUES_COMMANDED_KEY, command_torques);
+		redis_client.setEigen(EE_POSITION_KEY, ee_pos);
+		redis_client.setEigen(EE_VELOCITY_KEY, ee_vel);
+		cout << "ee pos: " << ee_pos.transpose() << endl;
 	}
 
 	timer.stop();
