@@ -200,9 +200,9 @@ int main() {
 				cout << "WAITING TO MOVING UP" << endl;
 
 				// compliant in Z direction
-				kp_xyz(2) = 0.0;
-				kv_xyz(2) = 0.0;
-				kp_ori_xyz(1) = 0.0;
+				kp_xyz(2) = 20.0;
+				kv_xyz(2) = 20.0;
+				kp_ori_xyz(1) = 20.0;
 				pose_task->setPosControlGains(kp_xyz, kv_xyz);
 				pose_task->setOriControlGains(kp_ori_xyz, kv_ori_xyz);
 
@@ -219,7 +219,7 @@ int main() {
 
 			command_torques = pose_task->computeTorques() + joint_task->computeTorques();
 
-			if (ball_velocity(2) < .1) {
+			if (ball_velocity(2) < .1 || abs(ee_pos(2) - ball_position(2)) > 0.17) {
 				cout << "MOTION UP TO MOTION DOWN" << endl;
 
 				// clear values for next motion
@@ -234,14 +234,15 @@ int main() {
 				pose_task->setOriControlGains(kp_ori_xyz, kv_ori_xyz);
 
 				ee_pos_desired = ee_pos_init;
-				ee_vel_desired << 0, 0, -ball_vel_des(2);
+				ee_pos_desired(2) -= 0.1;
+				// ee_vel_desired << 0, 0, -ball_vel_des(2);
 				ee_ori_desired = ee_ori_init;
 				q_desired = robot_q_init;
 
 				// pose_task->disableInternalOtg();
 
 				pose_task->setGoalPosition(ee_pos_desired);
-				pose_task->setGoalLinearVelocity(ee_vel_desired);
+				// pose_task->setGoalLinearVelocity(ee_vel_desired);
 				pose_task->setGoalOrientation(ee_ori_desired);
 				joint_task->setGoalPosition(q_desired);
 
