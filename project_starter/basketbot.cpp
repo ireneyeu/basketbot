@@ -143,7 +143,6 @@ int main() {
 
 	cout << "Entering controller loop" << endl;
 	cout << "["<< state << "]" << endl;
-	cout << robot->position(control_link, control_point) << endl;
 
 
 	// create a loop timer
@@ -195,18 +194,17 @@ int main() {
 			joint_task->updateTaskModel(pose_task->getTaskAndPreviousNullspace());
 
 			command_torques = pose_task->computeTorques() + joint_task->computeTorques();
-			// cout << ball_position(2) << ", " << ee_pos(2) << endl;
 
-			if (abs(ball_position(2) - ee_pos(2)) < 0.05) {
+			if (abs(ball_position(2) - ee_pos(2)) < 0.15) {
 				cout << "Ball Detected" << endl;
 				cout << "WAITING TO MOVING UP" << endl;
 
 				// compliant in Z direction
-				kp_xyz(2) = 10.0;
-				kv_xyz(2) = 10.0;
-				// kp_ori_xyz(2) = 0.0;
+				kp_xyz(2) = 0.0;
+				kv_xyz(2) = 0.0;
+				kp_ori_xyz(1) = 0.0;
 				pose_task->setPosControlGains(kp_xyz, kv_xyz);
-				// pose_task->setOriControlGains(kp_ori_xyz, kv_ori_xyz);
+				pose_task->setOriControlGains(kp_ori_xyz, kv_ori_xyz);
 
 				ball_vel_des = ball_velocity;
 
@@ -222,7 +220,7 @@ int main() {
 			command_torques = pose_task->computeTorques() + joint_task->computeTorques();
 
 			if (ball_velocity(2) < .1) {
-				cout << "Motion Up to Motion Down" << endl;
+				cout << "MOTION UP TO MOTION DOWN" << endl;
 
 				// clear values for next motion
 				pose_task->reInitializeTask();
@@ -231,7 +229,7 @@ int main() {
 				// set up new gains
 				kp_xyz(2) = 400.0;
 				kv_xyz(2) = 100.0;
-				kp_ori_xyz(2) = 200.0;
+				kp_ori_xyz(1) = 200.0;
 				pose_task->setPosControlGains(kp_xyz, kv_xyz);
 				pose_task->setOriControlGains(kp_ori_xyz, kv_ori_xyz);
 
@@ -241,7 +239,6 @@ int main() {
 				q_desired = robot_q_init;
 
 				// pose_task->disableInternalOtg();
-				cout << "ee vel: " << ee_vel_desired.transpose() << endl;
 
 				pose_task->setGoalPosition(ee_pos_desired);
 				pose_task->setGoalLinearVelocity(ee_vel_desired);
@@ -259,13 +256,11 @@ int main() {
 			joint_task->updateTaskModel(pose_task->getTaskAndPreviousNullspace());
 
 			command_torques = pose_task->computeTorques() + joint_task->computeTorques();
-			// cout << abs(ee_pos(2) - ee_pos_desired(2)) << endl;
 
 			if (abs(ee_pos(2) - ee_pos_desired(2)) < 0.05) {
-				cout << "Motion Down to Waiting" << endl;
+				cout << "MOTION DOWN TO WAITING" << endl;
 				pose_task->reInitializeTask();
 				joint_task->reInitializeTask();
-				cout << "EE pos des: " << ee_pos_desired.transpose() << endl;
 
 				ee_pos_desired = ee_pos_init;
 				ee_vel_desired = ee_vel_init;
@@ -285,7 +280,6 @@ int main() {
 		redis_client.setEigen(JOINT_TORQUES_COMMANDED_KEY, command_torques);
 		redis_client.setEigen(EE_POSITION_KEY, ee_pos);
 		redis_client.setEigen(EE_VELOCITY_KEY, ee_vel);
-		cout << "ee pos: " << ee_pos.transpose() << endl;
 	}
 
 	timer.stop();
