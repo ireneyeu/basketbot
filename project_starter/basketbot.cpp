@@ -46,28 +46,6 @@ int main() {
 	signal(SIGTERM, &sighandler);
 	signal(SIGINT, &sighandler);
 
-	// load robots, read current state and update the model
-	auto robot = std::make_shared<SaiModel::SaiModel>(robot_file, false);
-	robot->setQ(redis_client.getEigen(JOINT_ANGLES_KEY));
-	robot->setDq(redis_client.getEigen(JOINT_VELOCITIES_KEY));
-	robot->updateModel();
-
-	// prepare controllers
-	int dof = robot->dof();
-	VectorXd command_torques = VectorXd::Zero(dof);  
-	MatrixXd N_prec = MatrixXd::Identity(dof, dof);
-
-	// arm task
-	const string control_link = "end-effector";
-	const Vector3d control_point = Vector3d(0.20, 0, 0.13); // NEED TO CHECK CONTROL POINT
-	Affine3d compliant_frame = Affine3d::Identity();
-	compliant_frame.translation() = control_point;
-	auto pose_task = std::make_shared<SaiPrimitives::MotionForceTask>(robot, control_link, compliant_frame);
-	
-	// joint task
-	auto joint_task = std::make_shared<SaiPrimitives::JointTask>(robot);
-
-
 	// // Define Information
 	// Ball information
 	Vector3d ball_position;
@@ -78,8 +56,10 @@ int main() {
 	Vector3d ee_pos;
 	Vector3d ee_vel;
 	Matrix3d ee_ori;
-	VectorXd robot_q(dof);
-	VectorXd robot_dq(dof);
+	VectorXd robot_q(7);
+	VectorXd robot_dq(7);
+	Vector3d EE_FORCES;
+	Vector3d EE_MOMENTS;
 	Vector3d ee_forces;
 	Vector3d ee_moments;
 
@@ -87,14 +67,14 @@ int main() {
 	Vector3d ee_pos_init;
 	Vector3d ee_vel_init;
 	Matrix3d ee_ori_init;
-	VectorXd robot_q_init(dof);
-	VectorXd robot_dq_init(dof);
+	VectorXd robot_q_init(7);
+	VectorXd robot_dq_init(7);
 
 	// Robot desired states
 	Vector3d ee_pos_desired;
 	Vector3d ee_vel_desired;
 	Matrix3d ee_ori_desired;
-	VectorXd q_desired(dof);
+	VectorXd q_desired(7);
 
 	// Robot Gains
 	VectorXd kp_xyz;
@@ -103,22 +83,64 @@ int main() {
 	VectorXd kv_vel_xyz;
 	VectorXd kp_ori_xyz;
 	VectorXd kv_ori_xyz;
-	
+
+	// // Assign initial values
 	// Initial robot state
-	// ee_pos_init = robot->position(control_link, control_point);
-	// ee_vel_init = robot->linearVelocity(control_link, control_point);
-	// ee_ori_init = robot->rotation(control_link);
-	// robot_q_init = robot->q();
-	// robot_dq_init = robot->dq();
-	ee_pos_init << 0.7, 0.0, 0.32;
+	ee_pos_init << 0.575, 0.0, 0.328;
 	ee_vel_init = Vector3d::Zero();
 	ee_ori_init << 1, 0, 0,
 					0, -1, 0,
 					0, 0, -1;
 	robot_q_init << 0.0, -25.0, 0.0, -135.0, 0.0, 105.0, 0.0;
 	robot_q_init *= M_PI/180.0;
-	robot_dq_init = VectorXd::Zero(dof);
+	robot_dq_init = VectorXd::Zero(7);
 
+	// load robots, read current state and update the model
+	auto robot = std::make_shared<SaiModel::SaiModel>(robot_file, false);
+
+	// Try reading Redis keys; fallback to defaults if not present (in order to launch controller first)
+	try {
+		VectorXd q = redis_client.getEigen(JOINT_ANGLES_KEY);
+		VectorXd dq = redis_client.getEigen(JOINT_VELOCITIES_KEY);
+		ball_position = redis_client.getEigen(BALL_POSITION_KEY);
+		ball_velocity = redis_client.getEigen(BALL_VELOCITY_KEY);
+		EE_FORCES = redis_client.getEigen(EE_FORCES_KEY);
+		EE_MOMENTS = redis_client.getEigen(EE_MOMENTS_KEY);
+		robot->setQ(q);
+		robot->setDq(dq);
+	} catch (const std::exception& e) {
+		std::cerr << "Warning: redis values empty." << "\nSetting default joint values in Redis." << std::endl;
+		// Set default place-holding values
+		robot->setQ(robot_q_init);
+		robot->setDq(robot_dq_init);
+		ball_position << 0.575, 0.0, 0.0;
+		ball_velocity << 0.0, 0.0, 3.0;
+		EE_FORCES = Vector3d::Zero();
+		EE_MOMENTS = Vector3d::Zero();
+		redis_client.setEigen(JOINT_ANGLES_KEY, robot_q_init);
+		redis_client.setEigen(JOINT_VELOCITIES_KEY, robot_dq_init);
+		redis_client.setEigen(BALL_POSITION_KEY, ball_position);
+		redis_client.setEigen(BALL_VELOCITY_KEY, ball_velocity);
+		redis_client.setEigen(EE_FORCES_KEY, EE_FORCES);
+		redis_client.setEigen(EE_MOMENTS_KEY, EE_MOMENTS);
+	}
+
+	robot->updateModel();
+
+	// prepare controllers
+	int dof = robot->dof();
+	VectorXd command_torques = VectorXd::Zero(dof);  
+	MatrixXd N_prec = MatrixXd::Identity(dof, dof);
+
+	// arm task
+	const string control_link = "end-effector";
+	const Vector3d control_point = Vector3d(0.05, 0, 0.13); // NEED TO CHECK CONTROL POINT
+	Affine3d compliant_frame = Affine3d::Identity();
+	compliant_frame.translation() = control_point;
+	auto pose_task = std::make_shared<SaiPrimitives::MotionForceTask>(robot, control_link, compliant_frame);
+	
+	// joint task
+	auto joint_task = std::make_shared<SaiPrimitives::JointTask>(robot);
 
 	// Desired robot states and gains
 	// Set Gains
@@ -174,7 +196,9 @@ int main() {
 		robot_dq = robot->dq();
 
 		// forces and moments
-		pose_task->updateSensedForceAndMoment(redis_client.getEigen(EE_FORCES_KEY), redis_client.getEigen(EE_MOMENTS_KEY));
+		EE_FORCES = redis_client.getEigen(EE_FORCES_KEY);
+		EE_MOMENTS = redis_client.getEigen(EE_MOMENTS_KEY);
+		pose_task->updateSensedForceAndMoment(EE_FORCES, EE_MOMENTS);
 		ee_forces = pose_task->getSensedForceControlWorldFrame();
 		ee_moments = pose_task->getSensedMomentControlWorldFrame();
 

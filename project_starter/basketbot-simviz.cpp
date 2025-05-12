@@ -49,7 +49,7 @@ const int n_objects = object_names.size();
 
 // Force sensor information
 const string link_name = "end-effector";
-const Vector3d control_point = Vector3d(0.20, 0, 0.13);
+const Vector3d control_point = Vector3d(0.05, 0, 0.13);
 Affine3d compliant_frame = Affine3d::Identity();
 Vector3d sensed_force;
 Vector3d sensed_moment;
@@ -104,7 +104,7 @@ int main() {
 	}
 
 	// set ball information
-	ball_position<< 0.65, 0.0, 0.0;
+	ball_position << 0.575, 0.0, 0.0;
 	ball_velocity << 0.0, 0.0, 3.0; // 2.8 from 0.0 to reach softly
 	ball_spin << 0.0, 0.0, 0.0;
 	ball_pose = Affine3d::Identity();
@@ -136,7 +136,9 @@ int main() {
 	redis_client.setEigen(BALL_POSITION_KEY, ball_position);
 	redis_client.setEigen(BALL_VELOCITY_KEY, ball_velocity);
 	redis_client.setEigen(EE_POSITION_KEY, robot->position(link_name, control_point));
-	redis_client.setEigen(EE_VELOCITY_KEY, robot->linearVelocity(link_name, control_point));	
+	redis_client.setEigen(EE_VELOCITY_KEY, robot->linearVelocity(link_name, control_point)); 
+	cout << "Init ee    (sim): " << robot->position(link_name, control_point).transpose() << endl;
+	cout << "Init ball (sim): " << ball_position.transpose() << endl;
 
 	// start simulation thread
 	thread sim_thread(simulation, sim);
