@@ -183,6 +183,11 @@ int main() {
 
 			ee_pos_desired(0) = ball_position(0) ;
 			ee_pos_desired(1) = ball_position(1) ;
+
+			ee_ori_desired = ee_ori_init;
+			
+
+
 			pose_task->setGoalPosition(ee_pos_desired);
 
 			ee_vel_desired(0) = ball_velocity(0);

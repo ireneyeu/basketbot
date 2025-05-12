@@ -62,7 +62,7 @@
 			</geometry>
 		</collision>
 		<inertial>
-        <mass value="10.6" />
+        <mass value="0.6" />
         <inertia ixx="0.0012" iyy="0.0012" izz="0.0012" ixy="0.0" ixz="0.0" iyz="0.0" />
 		</inertial>
 	</dynamic_object>

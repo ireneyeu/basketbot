@@ -117,6 +117,7 @@ int main() {
 	sim->setCollisionRestitution(0.0);
 	sim->setCollisionRestitution(1.0, "BALL");
 	sim->setCollisionRestitution(1.0, "Floor");
+	sim->setCollisionRestitution(0.0, "PANDA");
 
 	// set co-efficient of friction
 	sim->setCoeffFrictionStatic(0.0);
@@ -175,7 +176,7 @@ void simulation(std::shared_ptr<SaiSimulation::SaiSimulation> sim) {
 	double sim_freq = 2000; // should be 2000
 	SaiCommon::LoopTimer timer(sim_freq);
 
-	sim->setTimestep(1.0 / sim_freq); // 0.1 is 10 times slower sim, 1.0 is real time
+	sim->setTimestep(0.1 / sim_freq); // 0.1 is 10 times slower sim, 1.0 is real time
 	sim->enableGravityCompensation(true);
 	sim->enableJointLimits(robot_name);
 

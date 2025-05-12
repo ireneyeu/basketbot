@@ -102,7 +102,7 @@ finally:
     plt.title("Ball Position")
     plt.legend()
     plt.grid(True)
-    # plt.savefig("ball_position.png")
+    plt.savefig("ball_position.png")
     plt.show()
 
     plt.figure()
