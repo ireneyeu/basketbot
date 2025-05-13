@@ -27,6 +27,7 @@
      WAITING = 0,
      MOTION_UP,
      MOTION_DOWN,
+     TEST
  };
  
  int main() {
@@ -34,7 +35,7 @@
      static const string robot_file = string(BASKETBOT_URDF_FOLDER) + "/panda/panda_arm_box.urdf";
  
      // initial state 
-     int state = WAITING;
+     int state = TEST;
      string controller_status = "1";
      
      // start redis client
@@ -252,6 +253,16 @@
  
                  state = WAITING;
              }
+         } else if (state == TEST) {
+
+            ee_pos_desired(2) = initial_ee_pos(2) + 0.1 * sin(time);
+
+            pose_task->setGoalPosition(ee_pos_desired);
+            N_prec.setIdentity();
+            pose_task->updateTaskModel(N_prec);
+            joint_task->updateTaskModel(pose_task->getTaskAndPreviousNullspace());
+ 
+            command_torques = pose_task->computeTorques() + joint_task->computeTorques();
          }
  
          // execute redis write callback
