@@ -173,6 +173,7 @@ int main() {
 	SaiCommon::LoopTimer timer(control_freq, 1e6);
 
 	pose_task->enableInternalOtgAccelerationLimited(4.0, 4.0, M_PI/3, M_PI); // OTG LIMITS STUFF
+	//pose_task->disableInternalOtg();
 
 
 	while (runloop) {
@@ -264,14 +265,14 @@ int main() {
 
 				ee_pos_desired = ee_pos_init;
 				ee_pos_desired(2) -= 0.1;
-				// ee_vel_desired << 0, 0, -ball_vel_des(2);
+				ee_vel_desired << 0, 0, -ball_vel_des(2);
 				ee_ori_desired = ee_ori_init;
 				q_desired = robot_q_init;
 
 				// pose_task->disableInternalOtg();
 
 				pose_task->setGoalPosition(ee_pos_desired);
-				// pose_task->setGoalLinearVelocity(ee_vel_desired);
+				pose_task->setGoalLinearVelocity(ee_vel_desired);
 				pose_task->setGoalOrientation(ee_ori_desired);
 				joint_task->setGoalPosition(q_desired);
 

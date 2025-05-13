@@ -175,10 +175,10 @@ void simulation(std::shared_ptr<SaiSimulation::SaiSimulation> sim) {
 	redis_client.connect();
 
 	// create a timer
-	double sim_freq = 2000; // should be 2000
+	double sim_freq = 500; // should be 2000
 	SaiCommon::LoopTimer timer(sim_freq);
 
-	sim->setTimestep(0.1 / sim_freq); // 0.1 is 10 times slower sim, 1.0 is real time
+	sim->setTimestep(1.0 / 500); // 0.1 is 10 times slower sim, 1.0 is real time
 	sim->enableGravityCompensation(true);
 	sim->enableJointLimits(robot_name);
 
