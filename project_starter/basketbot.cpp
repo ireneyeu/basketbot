@@ -22,20 +22,37 @@ void sighandler(int){runloop = false;}
 
 #include "redis_keys.h"
 
+
+bool simulation = false;
+
+
+
 // States 
 enum State {
-	WAITING = 0,
+	POSTURE = 0,
+	WAITING,
 	MOTION_UP,
 	MOTION_DOWN,
 	TEST
 };
 
 int main() {
+
+	if (simulation){
+		JOINT_ANGLES_KEY = "sai::sim::PANDA::sensors::q";
+		JOINT_VELOCITIES_KEY = "sai::sim::PANDA::sensors::dq";
+		JOINT_TORQUES_COMMANDED_KEY = "sai::sim::PANDA::actuators::fgc";
+	} else{
+		JOINT_TORQUES_COMMANDED_KEY = "sai::commands::FrankaRobot::control_torques";
+		JOINT_VELOCITIES_KEY = "sai::sensors::FrankaRobot::joint_velocities";
+		JOINT_ANGLES_KEY = "sai::sensors::FrankaRobot::joint_positions";
+	}
+
 	// Location of URDF files specifying world and robot information
 	static const string robot_file = string(BASKETBOT_URDF_FOLDER) + "/panda/panda_arm_box.urdf";
 
 	// initial state 
-	int state = TEST;
+	int state = POSTURE;
 	string controller_status = "1";
 	
 	// start redis client
@@ -87,7 +104,9 @@ int main() {
 
 	// // Assign initial values
 	// Initial robot state
-	ee_pos_init << 0.575, 0.0, 0.328;
+	//ee_pos_init << 0.0, 0.575, 0.328;
+
+	ee_pos_init << 0.15, 0.6, 0.4;
 	ee_vel_init = Vector3d::Zero();
 	ee_ori_init << 1, 0, 0,
 					0, -1, 0,
@@ -118,8 +137,8 @@ int main() {
 		ball_velocity << 0.0, 0.0, 3.0;
 		EE_FORCES = Vector3d::Zero();
 		EE_MOMENTS = Vector3d::Zero();
-		redis_client.setEigen(JOINT_ANGLES_KEY, robot_q_init);
-		redis_client.setEigen(JOINT_VELOCITIES_KEY, robot_dq_init);
+		//redis_client.setEigen(JOINT_ANGLES_KEY, robot_q_init);
+		//redis_client.setEigen(JOINT_VELOCITIES_KEY, robot_dq_init);
 		redis_client.setEigen(BALL_POSITION_KEY, ball_position);
 		redis_client.setEigen(BALL_VELOCITY_KEY, ball_velocity);
 		redis_client.setEigen(EE_FORCES_KEY, EE_FORCES);
@@ -135,7 +154,8 @@ int main() {
 
 	// arm task
 	const string control_link = "end-effector";
-	const Vector3d control_point = Vector3d(0.05, 0, 0.13); // NEED TO CHECK CONTROL POINT
+	//const Vector3d control_point = Vector3d(0.05, 0, 0.13); // NEED TO CHECK CONTROL POINT
+	const Vector3d control_point = Vector3d(0.0, 0, 0.0);
 	Affine3d compliant_frame = Affine3d::Identity();
 	compliant_frame.translation() = control_point;
 	auto pose_task = std::make_shared<SaiPrimitives::MotionForceTask>(robot, control_link, compliant_frame);
@@ -145,10 +165,10 @@ int main() {
 
 	// Desired robot states and gains
 	// Set Gains
-	kp_xyz = Vector3d(400.0, 400.0, 400.0);
-	kv_xyz = Vector3d(100.0, 100.0, 100.0);
-	kp_ori_xyz = Vector3d(200.0, 200.0, 200.0);
-	kv_ori_xyz = Vector3d(30.0, 30.0, 30.0);
+	kp_xyz = Vector3d(100.0, 100.0, 100.0);
+	kv_xyz = Vector3d(20.0, 20.0, 20.0);
+	kp_ori_xyz = Vector3d(100.0, 100.0, 100.0);
+	kv_ori_xyz = Vector3d(20.0, 20.0, 20.0);
 
 	pose_task->setPosControlGains(kp_xyz, kv_xyz);
 	pose_task->setOriControlGains(kp_ori_xyz, kv_ori_xyz);
@@ -159,6 +179,8 @@ int main() {
 	ee_vel_desired = ee_vel_init;
 	ee_ori_desired = ee_ori_init;
 	q_desired = robot_q_init;
+
+	q_desired << 1.46298,-0.246285,0.030638,-2.07553,0.0518735,1.84324,0.679142;
 
 	// Set tasks
 	pose_task->setGoalPosition(ee_pos_desired);
@@ -173,8 +195,10 @@ int main() {
 	double control_freq = 1000; // should be 1000
 	SaiCommon::LoopTimer timer(control_freq, 1e6);
 
-	pose_task->enableInternalOtgAccelerationLimited(4.0, 4.0, M_PI/3, M_PI); // OTG LIMITS STUFF
-	//pose_task->disableInternalOtg();
+	//pose_task->enableInternalOtgAccelerationLimited(4.0, 4.0, M_PI/3, M_PI); // OTG LIMITS STUFF
+	pose_task->disableInternalOtg();
+
+	double time_start;
 
 
 	while (runloop) {
@@ -192,6 +216,8 @@ int main() {
 
 		// robot states
 		ee_pos = robot->position(control_link, control_point);
+
+		//cout << ee_pos << endl << endl;
 		ee_vel = robot->linearVelocity(control_link, control_point);
 		ee_ori = robot->rotation(control_link);
 		robot_q = robot->q();
@@ -203,6 +229,29 @@ int main() {
 		pose_task->updateSensedForceAndMoment(EE_FORCES, EE_MOMENTS);
 		ee_forces = pose_task->getSensedForceControlWorldFrame();
 		ee_moments = pose_task->getSensedMomentControlWorldFrame();
+
+		if (state == POSTURE) {
+			// update task model 
+			N_prec.setIdentity();
+			joint_task->updateTaskModel(N_prec);
+
+			command_torques = joint_task->computeTorques();
+
+			cout << (robot->q() - q_desired).norm() << endl;
+
+			if ((robot->q() - q_desired).norm() < 8e-2) {
+				cout << "Posture To Motion" << endl;
+				pose_task->reInitializeTask();
+				joint_task->reInitializeTask();
+
+				ee_pos_init = robot->position(control_link, control_point);
+
+				pose_task->setGoalPosition(ee_pos);
+				time_start = time;
+
+				state = TEST;
+			}
+		}
 
 		if (state == WAITING) {
 			// update task model 
@@ -308,9 +357,16 @@ int main() {
 			}
 		} else if (state == TEST) {
 
-            ee_pos_desired(2) = ee_pos_init(2) + 0.1 * sin(5*time);
+			double freq = 4.0;
+
+            ee_pos_desired(2) = ee_pos_init(2) + 0.1 * sin(freq*(time - time_start));
+
+			ee_vel_desired(0) = 0;
+			ee_vel_desired(1) = 0;
+			ee_vel_desired(2) = 0.1*freq*cos(freq*(time - time_start));
 
             pose_task->setGoalPosition(ee_pos_desired);
+			pose_task->setGoalLinearVelocity(ee_vel_desired);
             N_prec.setIdentity();
             pose_task->updateTaskModel(N_prec);
             joint_task->updateTaskModel(pose_task->getTaskAndPreviousNullspace());

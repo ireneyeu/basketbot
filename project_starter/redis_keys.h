@@ -13,9 +13,9 @@
  * 
  */
 
- const std::string JOINT_ANGLES_KEY = "sai::sim::PANDA::sensors::q";
- const std::string JOINT_VELOCITIES_KEY = "sai::sim::PANDA::sensors::dq";
- const std::string JOINT_TORQUES_COMMANDED_KEY = "sai::sim::PANDA::actuators::fgc";
+std::string JOINT_ANGLES_KEY = "sai::sim::PANDA::sensors::q";
+std::string JOINT_VELOCITIES_KEY = "sai::sim::PANDA::sensors::dq";
+std::string JOINT_TORQUES_COMMANDED_KEY = "sai::sim::PANDA::actuators::fgc";
  const std::string CONTROLLER_RUNNING_KEY = "sai::sim::PANDA::controller";
  
  const std::string GRIPPER_JOINT_ANGLES_KEY = "sai::sim::PANDA::sensors::q";
