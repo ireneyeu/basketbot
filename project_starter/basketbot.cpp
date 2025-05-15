@@ -392,11 +392,11 @@ int main() {
             command_torques = pose_task->computeTorques() + joint_task->computeTorques();
         } else if (state == TEST2) {
 
-			double freq = 0.5;
-			float theta = 20.0*M_PI/180.0 * sin(freq*(time - time_start));
+			double freq = 2.5;
+			float theta = -13*M_PI/180.0 + 26.0*M_PI/180.0 * sin(freq*(time - time_start));
 			ee_pos_desired = ee_pos_init;
 			pose_task->setGoalPosition(ee_pos_desired);
-			pose_task->setGoalOrientation(AngleAxisd(theta, Vector3d::UnitX()).toRotationMatrix());
+			pose_task->setGoalOrientation(AngleAxisd(theta, ee_ori_init.col(1)).toRotationMatrix() * ee_ori_init);
 
             N_prec.setIdentity();
             pose_task->updateTaskModel(N_prec);
