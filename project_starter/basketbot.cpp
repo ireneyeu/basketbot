@@ -23,7 +23,7 @@ void sighandler(int){runloop = false;}
 #include "redis_keys.h"
 
 
-bool simulation = false;
+bool simulation = true;
 
 
 
@@ -33,16 +33,20 @@ enum State {
 	WAITING,
 	MOTION_UP,
 	MOTION_DOWN,
-	TEST
+	TEST1,
+	TEST2,
+	TEST3
 };
 
 int main() {
 
 	if (simulation){
+		cout << "SIMULATION TRUE" << endl;
 		JOINT_ANGLES_KEY = "sai::sim::PANDA::sensors::q";
 		JOINT_VELOCITIES_KEY = "sai::sim::PANDA::sensors::dq";
 		JOINT_TORQUES_COMMANDED_KEY = "sai::sim::PANDA::actuators::fgc";
 	} else{
+		cout << "SIMULATION FALSE" << endl;
 		JOINT_TORQUES_COMMANDED_KEY = "sai::commands::FrankaRobot::control_torques";
 		JOINT_VELOCITIES_KEY = "sai::sensors::FrankaRobot::joint_velocities";
 		JOINT_ANGLES_KEY = "sai::sensors::FrankaRobot::joint_positions";
@@ -53,7 +57,7 @@ int main() {
 
 	// initial state 
 	int state = POSTURE;
-	string controller_status = "1";
+	string controller_status = "2"; // "1" = test up down, "2" = test orientation speed, "3" = test up down with orientation, "4" = waiting
 	
 	// start redis client
 	auto redis_client = SaiCommon::RedisClient();
@@ -101,6 +105,9 @@ int main() {
 	VectorXd kv_vel_xyz;
 	VectorXd kp_ori_xyz;
 	VectorXd kv_ori_xyz;
+
+	float dribble_count = 0.0;
+	bool ball_valid;
 
 	// // Assign initial values
 	// Initial robot state
@@ -237,19 +244,29 @@ int main() {
 
 			command_torques = joint_task->computeTorques();
 
-			cout << (robot->q() - q_desired).norm() << endl;
+			// cout << (robot->q() - q_desired).norm() << endl;
 
 			if ((robot->q() - q_desired).norm() < 8e-2) {
 				cout << "Posture To Motion" << endl;
 				pose_task->reInitializeTask();
 				joint_task->reInitializeTask();
 
-				ee_pos_init = robot->position(control_link, control_point);
+				ee_pos_init = ee_pos;
+				ee_ori_init = ee_ori;
 
 				pose_task->setGoalPosition(ee_pos);
 				time_start = time;
 
-				state = TEST;
+				if (controller_status == "1") {
+					state = TEST1;
+				} else if (controller_status == "2") {
+					state = TEST2;
+					cout << AngleAxisd(0, Vector3d::UnitX()).toRotationMatrix() << ee_ori << endl;
+				} else if (controller_status == "3") {
+					state = TEST3;
+				} else if (controller_status == "4") {
+					state = WAITING;
+				}
 			}
 		}
 
@@ -340,6 +357,7 @@ int main() {
 
 			if (abs(ee_pos(2) - ee_pos_desired(2)) < 0.05) {
 				cout << "MOTION DOWN TO WAITING" << endl;
+				dribble_count += 1.0;
 				pose_task->reInitializeTask();
 				joint_task->reInitializeTask();
 
@@ -355,7 +373,7 @@ int main() {
 				state = WAITING;
 				cout << "["<< state << "]" << endl;
 			}
-		} else if (state == TEST) {
+		} else if (state == TEST1) {
 
 			double freq = 4.0;
 
@@ -372,6 +390,19 @@ int main() {
             joint_task->updateTaskModel(pose_task->getTaskAndPreviousNullspace());
  
             command_torques = pose_task->computeTorques() + joint_task->computeTorques();
+        } else if (state == TEST2) {
+
+			double freq = 0.5;
+			float theta = 20.0*M_PI/180.0 * sin(freq*(time - time_start));
+			ee_pos_desired = ee_pos_init;
+			pose_task->setGoalPosition(ee_pos_desired);
+			pose_task->setGoalOrientation(AngleAxisd(theta, Vector3d::UnitX()).toRotationMatrix());
+
+            N_prec.setIdentity();
+            pose_task->updateTaskModel(N_prec);
+            joint_task->updateTaskModel(pose_task->getTaskAndPreviousNullspace());
+ 
+            command_torques = pose_task->computeTorques() + joint_task->computeTorques();
         }
 
 		// execute redis write callback
@@ -381,6 +412,7 @@ int main() {
 	}
 
 	timer.stop();
+	cout << "Total robot dribble count: " << dribble_count << endl;
 	cout << "\nSimulation loop timer stats:\n";
 	timer.printInfoPostRun();
 	redis_client.setEigen(JOINT_TORQUES_COMMANDED_KEY, 0 * command_torques);  // back to floating
