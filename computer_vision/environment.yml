@@ -1,0 +1,18 @@
+# To activate the conda environment, run:
+# conda env create -f environment.yml
+# conda activate basketbot-env
+
+
+name: basketbot-env
+channels:
+  - defaults
+  - conda-forge
+  - robostack  # for pyrealsense2 if available
+dependencies:
+  - python=3.10
+  - numpy=1.21.5
+  - pip
+  - pip:
+      - opencv-contrib-python==4.7.0.72
+      - pyrealsense2==2.54.1.5684
+      - ultralytics==8.0.20

@@ -1,0 +1,10 @@
+# To activate the virtual environment, run:
+# conda create -n basketbot-env python=3.10 -y
+# conda activate basketbot-env
+# pip install -r requirements.txt
+
+
+numpy==1.21.5
+opencv-contrib-python==4.7.0.72
+pyrealsense2==2.54.1.5684  # You may need to match this with your camera SDK version
+ultralytics==8.0.20  # For YOLOv8, optional
