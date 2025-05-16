@@ -23,7 +23,7 @@ void sighandler(int){runloop = false;}
 #include "redis_keys.h"
 
 
-bool simulation = true;
+bool simulation = false;
 
 
 
@@ -121,6 +121,9 @@ int main() {
 	robot_q_init << 0.0, -25.0, 0.0, -135.0, 0.0, 105.0, 0.0;
 	robot_q_init *= M_PI/180.0;
 	robot_dq_init = VectorXd::Zero(7);
+
+	
+	double freq = 5.0;
 
 	// load robots, read current state and update the model
 	auto robot = std::make_shared<SaiModel::SaiModel>(robot_file, false);
@@ -244,9 +247,11 @@ int main() {
 
 			command_torques = joint_task->computeTorques();
 
+			cout << ee_ori << endl << endl;
+
 			// cout << (robot->q() - q_desired).norm() << endl;
 
-			if ((robot->q() - q_desired).norm() < 8e-2) {
+			if ((robot->q() - q_desired).norm() < 15e-2) {
 				cout << "Posture To Motion" << endl;
 				pose_task->reInitializeTask();
 				joint_task->reInitializeTask();
@@ -377,7 +382,7 @@ int main() {
 			}
 		} else if (state == TEST1) {
 
-			double freq = 4.0;
+			// double freq = 4.0;
 
             ee_pos_desired(2) = ee_pos_init(2) + 0.1 * sin(freq*(time - time_start));
 
@@ -394,7 +399,7 @@ int main() {
             command_torques = pose_task->computeTorques() + joint_task->computeTorques();
         } else if (state == TEST2) {
 
-			double freq = 2.5;
+			// double freq = 2.5;
 			float theta = -13*M_PI/180.0 + 26.0*M_PI/180.0 * sin(freq*(time - time_start));
 			ee_pos_desired = ee_pos_init;
 			ee_ori_desired = AngleAxisd(theta, ee_ori_init.col(1)).toRotationMatrix() * ee_ori_init;
@@ -404,19 +409,21 @@ int main() {
             N_prec.setIdentity();
             pose_task->updateTaskModel(N_prec);
             joint_task->updateTaskModel(pose_task->getTaskAndPreviousNullspace());
+
+	
  
             command_torques = pose_task->computeTorques() + joint_task->computeTorques();
         } else if (state == TEST3) {
 
-			double freq = 4.0;
+			// double freq = 4.0;
 
-            ee_pos_desired(2) = ee_pos_init(2) + 0.1 * sin(freq*(time - time_start));
+            ee_pos_desired(2) = ee_pos_init(2) + 0.05 * sin(freq*(time - time_start));
 
 			ee_vel_desired(0) = 0;
 			ee_vel_desired(1) = 0;
 			ee_vel_desired(2) = 0.1*freq*cos(freq*(time - time_start));
 
-			float theta = -13*M_PI/180.0 + 26.0*M_PI/180.0 * sin(freq*(time - time_start));
+			float theta = -3*M_PI/180.0 + 13.0*M_PI/180.0 * sin(freq*(time - time_start));
 			ee_ori_desired = AngleAxisd(theta, ee_ori_init.col(1)).toRotationMatrix() * ee_ori_init;
 
 			pose_task->setGoalPosition(ee_pos_desired);
