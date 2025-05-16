@@ -57,7 +57,7 @@ int main() {
 
 	// initial state 
 	int state = POSTURE;
-	string controller_status = "2"; // "1" = test up down, "2" = test orientation speed, "3" = test up down with orientation, "4" = waiting
+	string controller_status = "3"; // "1" = test up down, "2" = test orientation speed, "3" = test up down with orientation, "4" = waiting
 	
 	// start redis client
 	auto redis_client = SaiCommon::RedisClient();
@@ -258,11 +258,13 @@ int main() {
 				time_start = time;
 
 				if (controller_status == "1") {
+					cout << "TEST1: Up-Down sine" << endl;
 					state = TEST1;
 				} else if (controller_status == "2") {
+					cout << "TEST2: Orientation sine" << endl;
 					state = TEST2;
-					cout << AngleAxisd(0, Vector3d::UnitX()).toRotationMatrix() << ee_ori << endl;
 				} else if (controller_status == "3") {
+					cout << "TEST3: Up-Down with orientation sines" << endl;
 					state = TEST3;
 				} else if (controller_status == "4") {
 					state = WAITING;
@@ -395,15 +397,39 @@ int main() {
 			double freq = 2.5;
 			float theta = -13*M_PI/180.0 + 26.0*M_PI/180.0 * sin(freq*(time - time_start));
 			ee_pos_desired = ee_pos_init;
+			ee_ori_desired = AngleAxisd(theta, ee_ori_init.col(1)).toRotationMatrix() * ee_ori_init;
 			pose_task->setGoalPosition(ee_pos_desired);
-			pose_task->setGoalOrientation(AngleAxisd(theta, ee_ori_init.col(1)).toRotationMatrix() * ee_ori_init);
+			pose_task->setGoalOrientation(ee_ori_desired);
 
             N_prec.setIdentity();
             pose_task->updateTaskModel(N_prec);
             joint_task->updateTaskModel(pose_task->getTaskAndPreviousNullspace());
  
             command_torques = pose_task->computeTorques() + joint_task->computeTorques();
+        } else if (state == TEST3) {
+
+			double freq = 4.0;
+
+            ee_pos_desired(2) = ee_pos_init(2) + 0.1 * sin(freq*(time - time_start));
+
+			ee_vel_desired(0) = 0;
+			ee_vel_desired(1) = 0;
+			ee_vel_desired(2) = 0.1*freq*cos(freq*(time - time_start));
+
+			float theta = -13*M_PI/180.0 + 26.0*M_PI/180.0 * sin(freq*(time - time_start));
+			ee_ori_desired = AngleAxisd(theta, ee_ori_init.col(1)).toRotationMatrix() * ee_ori_init;
+
+			pose_task->setGoalPosition(ee_pos_desired);
+			pose_task->setGoalOrientation(ee_ori_desired);
+			pose_task->setGoalLinearVelocity(ee_vel_desired);
+            N_prec.setIdentity();
+            pose_task->updateTaskModel(N_prec);
+            joint_task->updateTaskModel(pose_task->getTaskAndPreviousNullspace());
+ 
+            command_torques = pose_task->computeTorques() + joint_task->computeTorques();
         }
+
+
 
 		// execute redis write callback
 		redis_client.setEigen(JOINT_TORQUES_COMMANDED_KEY, command_torques);
