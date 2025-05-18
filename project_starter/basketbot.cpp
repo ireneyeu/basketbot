@@ -23,7 +23,7 @@ void sighandler(int){runloop = false;}
 #include "redis_keys.h"
 
 
-bool simulation = false;
+bool simulation = true;
 
 
 
@@ -61,7 +61,7 @@ int main() {
 
 	// initial state 
 	int state = POSTURE;
-	string controller_status = "3"; // "1" = test up down, "2" = test orientation speed, "3" = test up down with orientation, "4" = waiting
+	string controller_status = "2"; // "1" = test up down, "2" = test orientation speed, "3" = test up down with orientation, "4" = waiting
 	
 	// start redis client
 	auto redis_client = SaiCommon::RedisClient();
@@ -169,7 +169,7 @@ int main() {
 	// arm task
 	const string control_link = "end-effector";
 	//const Vector3d control_point = Vector3d(0.05, 0, 0.13); // NEED TO CHECK CONTROL POINT
-	const Vector3d control_point = Vector3d(0.0, 0, 0.0);
+	const Vector3d control_point = Vector3d(-0.13, 0, 0.0);
 	Affine3d compliant_frame = Affine3d::Identity();
 	compliant_frame.translation() = control_point;
 	auto pose_task = std::make_shared<SaiPrimitives::MotionForceTask>(robot, control_link, compliant_frame);
@@ -256,6 +256,8 @@ int main() {
 				joint_task->reInitializeTask();
 
 				ee_pos_init = ee_pos;
+				ee_pos_init(2)+= 0.05;
+				ee_pos_init(1)+= 0.1; 
 				ee_ori_init = ee_ori;
 
 				pose_task->setGoalPosition(ee_pos);
@@ -401,6 +403,7 @@ int main() {
 			// double freq = 2.5;
 			float theta = -13*M_PI/180.0 + 26.0*M_PI/180.0 * sin(freq*(time - time_start));
 			ee_pos_desired = ee_pos_init;
+
 			ee_ori_desired = AngleAxisd(theta, ee_ori_init.col(1)).toRotationMatrix() * ee_ori_init;
 			pose_task->setGoalPosition(ee_pos_desired);
 			pose_task->setGoalOrientation(ee_ori_desired);
@@ -416,7 +419,7 @@ int main() {
 
 			// double freq = 4.0;
 
-            ee_pos_desired(2) = ee_pos_init(2) + 0.05 * sin(freq*(time - time_start));
+            ee_pos_desired(2) = ee_pos_init(2) + 0.025 * sin(freq*(time - time_start));
 
 			ee_vel_desired(0) = 0;
 			ee_vel_desired(1) = 0;

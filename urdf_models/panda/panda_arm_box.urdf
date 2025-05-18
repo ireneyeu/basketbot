@@ -221,7 +221,7 @@
 		<limit effort="12" lower="-2.8973" upper="2.8973" velocity="2.6100"/>
 	</joint>
 	<joint name="joint_ee" type="fixed">
-		<origin rpy="0 0 -0.785" xyz="0.13 0 0.12"/>
+		<origin rpy="0 0 -0.785" xyz="0.1 -0.1 0.12"/>
 		<parent link="link7"/>
 		<child link="end-effector"/>
 	</joint>
