@@ -27,5 +27,5 @@ std::string JOINT_TORQUES_COMMANDED_KEY = "sai::sim::PANDA::actuators::fgc";
  const std::string EE_POSITION_KEY = "sai::sim::PANDA::end-effector::position";
  const std::string EE_VELOCITY_KEY = "sai::sim::PANDA::end-effector::velocity";
 
- const std::string BALL_POSITION_KEY = "sai::sim::BALL::sensors::position";
- const std::string BALL_VELOCITY_KEY = "sai::sim::BALL::sensors::velocity";
+ std::string BALL_POSITION_KEY = "sai::sim::BALL::sensors::position";
+ std::string BALL_VELOCITY_KEY = "sai::sim::BALL::sensors::velocity";

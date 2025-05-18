@@ -45,11 +45,15 @@ int main() {
 		JOINT_ANGLES_KEY = "sai::sim::PANDA::sensors::q";
 		JOINT_VELOCITIES_KEY = "sai::sim::PANDA::sensors::dq";
 		JOINT_TORQUES_COMMANDED_KEY = "sai::sim::PANDA::actuators::fgc";
+		BALL_POSITION_KEY = "sai::sim::BALL::sensors::position";
+ 		BALL_VELOCITY_KEY = "sai::sim::BALL::sensors::velocity";
 	} else{
 		cout << "SIMULATION FALSE" << endl;
 		JOINT_TORQUES_COMMANDED_KEY = "sai::commands::FrankaRobot::control_torques";
 		JOINT_VELOCITIES_KEY = "sai::sensors::FrankaRobot::joint_velocities";
 		JOINT_ANGLES_KEY = "sai::sensors::FrankaRobot::joint_positions";
+		BALL_POSITION_KEY = "sai::camera::BALL::sensors::position";
+ 		BALL_VELOCITY_KEY = "sai::camera::BALL::sensors::velocity";
 	}
 
 	// Location of URDF files specifying world and robot information
@@ -107,7 +111,7 @@ int main() {
 	VectorXd kv_ori_xyz;
 
 	float dribble_count = 0.0;
-	bool ball_valid;
+	bool ball_valid = false;
 
 	// // Assign initial values
 	// Initial robot state
@@ -143,7 +147,7 @@ int main() {
 		// Set default place-holding values
 		robot->setQ(robot_q_init);
 		robot->setDq(robot_dq_init);
-		ball_position << 0.575, 0.0, 0.0;
+		ball_position << 0.0, 0.575, 0.0;
 		ball_velocity << 0.0, 0.0, 3.0;
 		EE_FORCES = Vector3d::Zero();
 		EE_MOMENTS = Vector3d::Zero();
@@ -190,7 +194,7 @@ int main() {
 	ee_ori_desired = ee_ori_init;
 	q_desired = robot_q_init;
 
-	q_desired << 1.46298,-0.246285,0.030638,-2.07553,0.0518735,1.84324,0.679142;
+	q_desired << 1.46298,-0.246285,0.030638,-2.07553,0.0518735,1.84324,0.679142; // Read from redis with: "sai::sim::PANDA::sensors::q"
 
 	// Set tasks
 	pose_task->setGoalPosition(ee_pos_desired);
@@ -226,8 +230,6 @@ int main() {
 
 		// robot states
 		ee_pos = robot->position(control_link, control_point);
-
-		//cout << ee_pos << endl << endl;
 		ee_vel = robot->linearVelocity(control_link, control_point);
 		ee_ori = robot->rotation(control_link);
 		robot_q = robot->q();
@@ -244,12 +246,9 @@ int main() {
 			// update task model 
 			N_prec.setIdentity();
 			joint_task->updateTaskModel(N_prec);
-
 			command_torques = joint_task->computeTorques();
 
 			cout << ee_ori << endl << endl;
-
-			// cout << (robot->q() - q_desired).norm() << endl;
 
 			if ((robot->q() - q_desired).norm() < 15e-2) {
 				cout << "Posture To Motion" << endl;

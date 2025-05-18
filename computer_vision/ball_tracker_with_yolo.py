@@ -4,9 +4,13 @@ import cv2
 import pyrealsense2 as rs
 import numpy as np
 from ultralytics import YOLO
+import redis
 
 # Load YOLOv8 model (can be fine-tuned for better basketball performance)
 model = YOLO("yolov8n.pt")  # lightweight model for speed
+BALL_POSITION_KEY = "sai::camera::BALL::sensors::position"
+BALL_VELOCITY_KEY = "sai::camera::BALL::sensors::velocity"
+redis_client = redis.Redis()
 
 # Choose OpenCV tracker
 def create_tracker(tracker_type="CSRT"):
@@ -86,6 +90,21 @@ try:
                 depth_intrin = depth_frame.profile.as_video_stream_profile().intrinsics
                 X, Y, Z = rs.rs2_deproject_pixel_to_point(depth_intrin, [cx, cy], depth)
                 print(f"3D Position: X={X:.2f}m, Y={Y:.2f}m, Z={Z:.2f}m")
+
+                ## Publish to Redis CHECK ALL THIS BLOCK #######
+                ##################################################################
+                p_cam = np.array([X, Y, Z])
+                R_cam_to_world = np.array([
+                                            [0, -1, 0],
+                                            [1, 0, 0],
+                                            [0, 0, 1] ])
+                t_cam_to_world = np.array([0.5, 0.2, 0.1])
+                p_world = R_cam_to_world @ p_cam + t_cam_to_world
+                
+                redis_client.set(BALL_POSITION_KEY, p_world.tobytes())
+                redis_client.set(BALL_VELOCITY_KEY, np.array([0.0, 0.0, 0.0]).tobytes()) # Placeholder for velocity NEED TO UPDATE THIS              
+                ####################################################################
+
             else:
                 cv2.putText(color_image, "Lost tracking, retrying...", (30, 30),
                             cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
