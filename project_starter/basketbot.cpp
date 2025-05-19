@@ -23,7 +23,7 @@ void sighandler(int){runloop = false;}
 #include "redis_keys.h"
 
 
-bool simulation = true;
+bool simulation = false;
 
 
 
@@ -35,7 +35,9 @@ enum State {
 	MOTION_DOWN,
 	TEST1,
 	TEST2,
-	TEST3
+	TEST3,
+	TEST4,
+	TEST5
 };
 
 int main() {
@@ -61,8 +63,11 @@ int main() {
 
 	// initial state 
 	int state = POSTURE;
-	string controller_status = "2"; // "1" = test up down, "2" = test orientation speed, "3" = test up down with orientation, "4" = waiting
-	
+	// "1" = test up down, "2" = test orientation speed, "3" = test up down with orientation, 
+	// "4" = test3 plus tracking the ball, "5" = orientation incline, "6" = waiting
+	string controller_status = "5"; 
+	double freq = 7.5; // 7.5 was tried and worked
+
 	// start redis client
 	auto redis_client = SaiCommon::RedisClient();
 	redis_client.connect();
@@ -126,8 +131,6 @@ int main() {
 	robot_q_init *= M_PI/180.0;
 	robot_dq_init = VectorXd::Zero(7);
 
-	
-	double freq = 5.0;
 
 	// load robots, read current state and update the model
 	auto robot = std::make_shared<SaiModel::SaiModel>(robot_file, false);
@@ -195,6 +198,7 @@ int main() {
 	q_desired = robot_q_init;
 
 	q_desired << 1.46298,-0.246285,0.030638,-2.07553,0.0518735,1.84324,0.679142; // Read from redis with: "sai::sim::PANDA::sensors::q"
+	// q_desired << 1.91256,0.40495,0.333675,-1.48236,-0.137048,1.98399,0.468571;
 
 	// Set tasks
 	pose_task->setGoalPosition(ee_pos_desired);
@@ -248,16 +252,14 @@ int main() {
 			joint_task->updateTaskModel(N_prec);
 			command_torques = joint_task->computeTorques();
 
-			cout << ee_ori << endl << endl;
-
 			if ((robot->q() - q_desired).norm() < 15e-2) {
 				cout << "Posture To Motion" << endl;
 				pose_task->reInitializeTask();
 				joint_task->reInitializeTask();
 
 				ee_pos_init = ee_pos;
-				ee_pos_init(2)+= 0.05;
-				ee_pos_init(1)+= 0.1; 
+				// ee_pos_init(2)+= 0.05;
+				// ee_pos_init(1)+= 0.1; 
 				ee_ori_init = ee_ori;
 
 				pose_task->setGoalPosition(ee_pos);
@@ -273,6 +275,14 @@ int main() {
 					cout << "TEST3: Up-Down with orientation sines" << endl;
 					state = TEST3;
 				} else if (controller_status == "4") {
+					cout << "TEST4: Test3 + following ball" << endl;
+					state = TEST4;
+				} else if (controller_status == "5") {
+					cout << "TEST5: adjusting orientation" << endl;
+					state = TEST5;
+				} else if (controller_status == "6") {
+					cout << "TEST6: Following ball in waiting" << endl;
+					cout << ball_position.transpose() << endl;
 					state = WAITING;
 				}
 			}
@@ -280,19 +290,16 @@ int main() {
 
 		if (state == WAITING) {
 			// update task model 
-
+			ee_pos_desired = ee_pos_init;
 			ee_pos_desired(0) = ball_position(0) ;
 			ee_pos_desired(1) = ball_position(1) ;
-
 			ee_ori_desired = ee_ori_init;
-			
-
 
 			pose_task->setGoalPosition(ee_pos_desired);
 
-			ee_vel_desired(0) = ball_velocity(0);
-			ee_vel_desired(1) = ball_velocity(1);
-			pose_task->setGoalLinearVelocity(ee_vel_desired);
+			// ee_vel_desired(0) = ball_velocity(0);
+			// ee_vel_desired(1) = ball_velocity(1);
+			// pose_task->setGoalLinearVelocity(ee_vel_desired);
 
 			N_prec.setIdentity();
 			pose_task->updateTaskModel(N_prec);
@@ -301,7 +308,7 @@ int main() {
 			command_torques = pose_task->computeTorques() + joint_task->computeTorques();
 
 			if (abs(ball_position(2) - ee_pos(2)) < 0.15) {
-				cout << "Ball Detected" << endl;
+				cout << "Ball Close Detected" << endl;
 				cout << "WAITING TO MOVING UP" << endl;
 
 				// compliant in Z direction
@@ -313,7 +320,7 @@ int main() {
 
 				ball_vel_des = ball_velocity;
 
-				state = MOTION_UP;
+				// state = MOTION_UP;
 				cout << "["<< state << "]" << endl;
 			}
 		} else if (state == MOTION_UP) {
@@ -399,9 +406,8 @@ int main() {
  
             command_torques = pose_task->computeTorques() + joint_task->computeTorques();
         } else if (state == TEST2) {
-
 			// double freq = 2.5;
-			float theta = -13*M_PI/180.0 + 26.0*M_PI/180.0 * sin(freq*(time - time_start));
+			float theta = -3*M_PI/180.0 + 20.0*M_PI/180.0 * sin(freq*(time - time_start));
 			ee_pos_desired = ee_pos_init;
 
 			ee_ori_desired = AngleAxisd(theta, ee_ori_init.col(1)).toRotationMatrix() * ee_ori_init;
@@ -416,16 +422,15 @@ int main() {
  
             command_torques = pose_task->computeTorques() + joint_task->computeTorques();
         } else if (state == TEST3) {
-
 			// double freq = 4.0;
-
-            ee_pos_desired(2) = ee_pos_init(2) + 0.025 * sin(freq*(time - time_start));
+			ee_pos_desired = ee_pos_init;
+            ee_pos_desired(2) = ee_pos_init(2) + 0.02 * sin(freq*(time - time_start));
 
 			ee_vel_desired(0) = 0;
 			ee_vel_desired(1) = 0;
-			ee_vel_desired(2) = 0.1*freq*cos(freq*(time - time_start));
+			ee_vel_desired(2) = 0.02*freq*cos(freq*(time - time_start));
 
-			float theta = -3*M_PI/180.0 + 13.0*M_PI/180.0 * sin(freq*(time - time_start));
+			float theta = -3*M_PI/180.0 + 20.0*M_PI/180.0 * sin(freq*(time - time_start));
 			ee_ori_desired = AngleAxisd(theta, ee_ori_init.col(1)).toRotationMatrix() * ee_ori_init;
 
 			pose_task->setGoalPosition(ee_pos_desired);
@@ -436,8 +441,50 @@ int main() {
             joint_task->updateTaskModel(pose_task->getTaskAndPreviousNullspace());
  
             command_torques = pose_task->computeTorques() + joint_task->computeTorques();
-        }
+        } else if (state == TEST4) {
+			// double freq = 4.0;
+			ee_pos_desired = ee_pos_init;
+			ee_pos_desired(0) = ball_position(0) ;
+			ee_pos_desired(1) = ball_position(1) ;
+            ee_pos_desired(2) = ee_pos_init(2) + 0.02 * sin(freq*(time - time_start));
 
+			ee_vel_desired(0) = 0;
+			ee_vel_desired(1) = 0;
+			ee_vel_desired(2) = 0.02*freq*cos(freq*(time - time_start));
+
+			float theta = -3*M_PI/180.0 + 20.0*M_PI/180.0 * sin(freq*(time - time_start));
+			ee_ori_desired = AngleAxisd(theta, ee_ori_init.col(1)).toRotationMatrix() * ee_ori_init;
+
+			pose_task->setGoalPosition(ee_pos_desired);
+			pose_task->setGoalOrientation(ee_ori_desired);
+			pose_task->setGoalLinearVelocity(ee_vel_desired);
+            N_prec.setIdentity();
+            pose_task->updateTaskModel(N_prec);
+            joint_task->updateTaskModel(pose_task->getTaskAndPreviousNullspace());
+ 
+            command_torques = pose_task->computeTorques() + joint_task->computeTorques();
+        } else if (state == TEST5) {
+			// q1 is angle to make up for x error, rotates about ee y
+			float q1 = atan( (ball_position(0)- ee_pos_init(0))/ (ee_pos_init(2)));
+			// q2 is angle to make up for y error, rotates about ee x
+			float q2 = atan( (ball_position(1)- ee_pos_init(1))/ (ee_pos_init(2)));
+
+			ee_pos_desired = ee_pos_init;
+
+			ee_ori_desired = AngleAxisd(q1, ee_ori_init.col(0)).toRotationMatrix() * ee_ori_init;
+			ee_ori_desired = AngleAxisd(q2, -ee_ori_init.col(1)).toRotationMatrix() * ee_ori_desired;
+			
+			pose_task->setGoalPosition(ee_pos_desired);
+			pose_task->setGoalOrientation(ee_ori_desired);
+
+            N_prec.setIdentity();
+            pose_task->updateTaskModel(N_prec);
+            joint_task->updateTaskModel(pose_task->getTaskAndPreviousNullspace());
+
+	
+ 
+            command_torques = pose_task->computeTorques() + joint_task->computeTorques();
+        } 
 
 
 		// execute redis write callback

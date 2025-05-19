@@ -10,6 +10,8 @@ BALL_VELOCITY_KEY = "sai::sim::BALL::sensors::velocity"
 EE_POSITION_KEY = "sai::sim::PANDA::end-effector::position"
 EE_VELOCITY_KEY = "sai::sim::PANDA::end-effector::velocity"
 
+TORQUES_KEY = "sai::sensors::FrankaRobot::joint_torques"
+
 # Redis connection
 redis_client = redis.Redis()
 
@@ -29,6 +31,9 @@ BALL_Z_VELOCITY = []
 EE_X = []
 EE_Y = []
 EE_Z = []
+
+TORQUES_2 = []
+TORQUES_4 = []
 
 # Graceful shutdown on Ctrl+C
 running = True
@@ -66,6 +71,13 @@ try:
             EE_Y.append(ee_position[1])
             EE_Z.append(ee_position[2])
 
+            robot_torques_redis = redis_client.get(TORQUES_KEY).decode("utf-8")
+            torques_array = [float(x) for x in robot_torques_redis.strip('[]').split(',')]
+            TORQUES_2.append(torques_array(1))
+            TORQUES_4.append(torques_array(3))
+
+
+
 
         except Exception as e:
             print(f"Error: {e}")
@@ -77,6 +89,21 @@ finally:
     
 
     print("Plotting...")
+    TORQUES_2 = np.array(TORQUES_2)
+    TORQUES_4 = np.array(TORQUES_2)
+
+
+    plt.figure()
+    plt.plot(TORQUES_2, color='r')
+    plt.plot(TORQUES_4, color='g')
+    plt.xlabel("Time [s]")
+    plt.ylabel("Torques")
+    plt.legend()
+    plt.grid(True)
+    # plt.savefig("end_effector_forces.png")
+    plt.show()
+
+
     
     # plt.figure()
     # plt.plot(EE_X_FORCE, label='X Force', color='r')
@@ -90,31 +117,31 @@ finally:
     # # plt.savefig("end_effector_forces.png")
     # plt.show()
 
-    plt.figure()
-    plt.plot(BALL_X_POSITION, label='X Position', color='r')
-    plt.plot(BALL_Y_POSITION, label='Y Position', color='g')
-    plt.plot(BALL_Z_POSITION, label='Z Position', color='b')
-    plt.plot(EE_X, label='EE X', color='c', linestyle='--')
-    plt.plot(EE_Y, label='EE Y', color='m', linestyle='-')
-    plt.plot(EE_Z, label='EE Z', color='y', linestyle=':')
-    plt.xlabel("Time [s]")
-    plt.ylabel("Position [m]")
-    plt.title("Ball Position")
-    plt.legend()
-    plt.grid(True)
-    plt.savefig("ball_position.png")
-    plt.show()
+    # plt.figure()
+    # plt.plot(BALL_X_POSITION, label='X Position', color='r')
+    # plt.plot(BALL_Y_POSITION, label='Y Position', color='g')
+    # plt.plot(BALL_Z_POSITION, label='Z Position', color='b')
+    # plt.plot(EE_X, label='EE X', color='c', linestyle='--')
+    # plt.plot(EE_Y, label='EE Y', color='m', linestyle='-')
+    # plt.plot(EE_Z, label='EE Z', color='y', linestyle=':')
+    # plt.xlabel("Time [s]")
+    # plt.ylabel("Position [m]")
+    # plt.title("Ball Position")
+    # plt.legend()
+    # plt.grid(True)
+    # plt.savefig("ball_position.png")
+    # plt.show()
 
-    plt.figure()
-    plt.plot(BALL_X_VELOCITY, label='X Velocity', color='r')
-    plt.plot(BALL_Y_VELOCITY, label='Y Velocity', color='g')
-    plt.plot(BALL_Z_VELOCITY, label='Z Velocity', color='b')
-    plt.xlabel("Time [s]")
-    plt.ylabel("Velocity [m/s]")
-    plt.title("Ball Velocity")
-    plt.legend()
-    plt.grid(True)
-    # plt.savefig("ball_velocity.png")
-    plt.show()
+    # plt.figure()
+    # plt.plot(BALL_X_VELOCITY, label='X Velocity', color='r')
+    # plt.plot(BALL_Y_VELOCITY, label='Y Velocity', color='g')
+    # plt.plot(BALL_Z_VELOCITY, label='Z Velocity', color='b')
+    # plt.xlabel("Time [s]")
+    # plt.ylabel("Velocity [m/s]")
+    # plt.title("Ball Velocity")
+    # plt.legend()
+    # plt.grid(True)
+    # # plt.savefig("ball_velocity.png")
+    # plt.show()
 
     print("Plotting done.")

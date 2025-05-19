@@ -115,16 +115,16 @@ try:
 
                 depth_intrin = depth_frame.profile.as_video_stream_profile().intrinsics
                 X, Y, Z = rs.rs2_deproject_pixel_to_point(depth_intrin, [cx, cy], depth)
-                print(f"3D Position: X={X:.2f}m, Y={Y:.2f}m, Z={Z:.2f}m")
+                # print(f"3D Position: X={X:.2f}m, Y={Y:.2f}m, Z={Z:.2f}m")
 
                 ## Publish to Redis CHECK ALL THIS BLOCK #######
                 ##################################################################
                 p_cam = np.array([X, Y, Z])
                 R_cam_to_world = np.array([
-                                            [0, -1, 0],
+                                            [0, 0, -1],
                                             [1, 0, 0],
-                                            [0, 0, 1] ])
-                t_cam_to_world = np.array([0.5, 0.2, 0.1])
+                                            [0, -1, 0] ])
+                t_cam_to_world = np.array([0.5, 0.5, 0.1])
                 p_world = R_cam_to_world @ p_cam + t_cam_to_world
                 
                 # Compute velocity with exponential smoothing
@@ -146,8 +146,9 @@ try:
                     last_time = current_time
 
                 # Send to Redis
-                redis_client.set(BALL_POSITION_KEY, ' '.join(map(str, p_world)))
-                redis_client.set(BALL_VELOCITY_KEY, ' '.join(map(str, velocity)))
+                redis_client.set(BALL_POSITION_KEY, ','.join(map(str, p_world)))
+                print( p_world)
+                redis_client.set(BALL_VELOCITY_KEY, ','.join(map(str, velocity)))
            
                 ####################################################################
 
