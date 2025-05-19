@@ -85,8 +85,34 @@ try:
                 cv2.rectangle(color_image, (x, y), (x + w, y + h), (0, 255, 0), 2)
                 cv2.circle(color_image, (cx, cy), 5, (0, 0, 255), -1)
 
-                # Get depth info
-                depth = depth_frame.get_distance(cx, cy)
+                # # Get depth info
+                # depth = depth_frame.get_distance(cx, cy)
+
+                # Improved depth estimation by sampling around center
+                sample_radius = 2  # pixels around the center (creates a (2*radius+1)^2 grid)
+                depth_values = []
+
+                for dx in range(-sample_radius, sample_radius + 1):
+                    for dy in range(-sample_radius, sample_radius + 1):
+                        sx, sy = cx + dx, cy + dy
+                        if 0 <= sx < depth_frame.get_width() and 0 <= sy < depth_frame.get_height():
+                            d = depth_frame.get_distance(sx, sy)
+                            if d > 0:  # Ignore invalid (zero) depth
+                                depth_values.append(d)
+
+                # Filter and select best depth
+                if depth_values:
+                    depth_array = np.array(depth_values)
+                    median = np.median(depth_array)
+                    filtered_depths = depth_array[np.abs(depth_array - median) < 0.1]  # reject outliers >10cm from median
+                    if len(filtered_depths) > 0:
+                        depth = np.min(filtered_depths)  # use closest reasonable value
+                    else:
+                        depth = median  # fallback to median
+                else:
+                    depth = 0.0  # fallback if no valid depth
+
+
                 depth_intrin = depth_frame.profile.as_video_stream_profile().intrinsics
                 X, Y, Z = rs.rs2_deproject_pixel_to_point(depth_intrin, [cx, cy], depth)
                 print(f"3D Position: X={X:.2f}m, Y={Y:.2f}m, Z={Z:.2f}m")
@@ -101,8 +127,28 @@ try:
                 t_cam_to_world = np.array([0.5, 0.2, 0.1])
                 p_world = R_cam_to_world @ p_cam + t_cam_to_world
                 
-                redis_client.set(BALL_POSITION_KEY, p_world.tobytes())
-                redis_client.set(BALL_VELOCITY_KEY, np.array([0.0, 0.0, 0.0]).tobytes()) # Placeholder for velocity NEED TO UPDATE THIS              
+                # Compute velocity with exponential smoothing
+                current_time = cv2.getTickCount() / cv2.getTickFrequency()  # in seconds
+                if 'last_position' not in locals():
+                    last_position = p_world
+                    last_time = current_time
+                    velocity = np.array([0.0, 0.0, 0.0])
+                    smoothed_velocity = np.array([0.0, 0.0, 0.0])
+                else:
+                    dt = current_time - last_time
+                    if dt > 0:
+                        raw_velocity = (p_world - last_position) / dt
+                        alpha = 0.2  # smoothing factor between 0 (more smooth) and 1 (no smoothing)
+                        smoothed_velocity = alpha * raw_velocity + (1 - alpha) * smoothed_velocity
+                    else:
+                        smoothed_velocity = np.array([0.0, 0.0, 0.0])
+                    last_position = p_world
+                    last_time = current_time
+
+                # Send to Redis
+                redis_client.set(BALL_POSITION_KEY, ' '.join(map(str, p_world)))
+                redis_client.set(BALL_VELOCITY_KEY, ' '.join(map(str, velocity)))
+           
                 ####################################################################
 
             else:
