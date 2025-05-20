@@ -49,7 +49,7 @@ const int n_objects = object_names.size();
 
 // Force sensor information
 const string link_name = "end-effector";
-const Vector3d control_point = Vector3d(0.05, 0, 0.13);
+const Vector3d control_point = Vector3d(-0.13, 0, 0.0);
 Affine3d compliant_frame = Affine3d::Identity();
 Vector3d sensed_force;
 Vector3d sensed_moment;
