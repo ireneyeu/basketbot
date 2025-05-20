@@ -148,9 +148,37 @@ try:
                     last_time = current_time
 
                 # Send to Redis
-                redis_client.set(BALL_POSITION_KEY, ','.join(map(str, p_world)))
-                print( p_world)
-                redis_client.set(BALL_VELOCITY_KEY, ','.join(map(str, velocity)))
+                # Position smoothing and outlier rejection
+                alpha_pos = 0.3  # smoothing factor for position
+                max_delta_pos = 0.5  # max allowed jump (meters)
+
+                if 'smoothed_position' not in locals():
+                    smoothed_position = p_world.copy()
+                else:
+                    delta = np.linalg.norm(p_world - smoothed_position)
+                    if delta < max_delta_pos:
+                        smoothed_position = alpha_pos * p_world + (1 - alpha_pos) * smoothed_position
+                    else:
+                        print(f"Outlier detected (Δ={delta:.2f} m), ignoring jump.")
+                        # Optionally clamp: smoothed_position = smoothed_position + np.clip(p_world - smoothed_position, -max_delta_pos, max_delta_pos)
+
+                # Send position and velocity to Redis
+                redis_client.set(BALL_POSITION_KEY, ','.join(map(str, smoothed_position)))
+                redis_client.set(BALL_VELOCITY_KEY, ','.join(map(str, smoothed_velocity)))
+
+                # Predict apex height if vertical velocity is upward in world frame
+                g = 9.81  # gravitational acceleration in m/s²
+                vz = smoothed_velocity[2]  # Z is vertical in world frame
+                z_current = smoothed_position[2]
+
+                if vz > 0:
+                    z_apex = z_current + (vz ** 2) / (2 * g)
+                else:
+                    z_apex = 0.0
+
+                redis_client.set(BALL_APEX_KEY, str(z_apex))
+                print(f"Apex Z prediction: {z_apex:.2f} m")
+
            
                 ####################################################################
 
