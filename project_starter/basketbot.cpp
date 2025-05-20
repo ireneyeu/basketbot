@@ -312,9 +312,17 @@ int main() {
 			ee_pos_desired(1) = ball_position(1) ;
 			pose_task->setGoalPosition(ee_pos_desired);
 
+			// orientation goals
 			ee_ori_desired = ee_ori_init;
 			float theta = 10.0*M_PI/180.0;
 			ee_ori_desired = AngleAxisd(theta, ee_ori_init.col(1)).toRotationMatrix() * ee_ori_init;
+			// q1 is angle to make up for x error, rotates about ee y
+			float q1 = atan( (ball_position(0)- ee_pos_init(0))/ (ee_pos_init(2))) / 2.0;
+			ee_ori_desired = AngleAxisd(q1, ee_ori_init.col(0)).toRotationMatrix() * ee_ori_desired;   // Check if ee_ori_init.col(0) is correct
+			// q2 is angle to make up for y error, rotates about ee x
+			float q2 = atan( (ball_position(1)- ee_pos_init(1))/ (ee_pos_init(2))) / 2.0;
+			ee_ori_desired = AngleAxisd(q2, -ee_ori_init.col(1)).toRotationMatrix() * ee_ori_desired;  // Check if -ee_ori_init.col(1) is correct
+			pose_task->setGoalOrientation(ee_ori_desired);
 			pose_task->setGoalOrientation(ee_ori_desired);
 
 			// ee_vel_desired(0) = ball_velocity(0);
