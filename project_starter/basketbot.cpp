@@ -86,6 +86,7 @@ int main() {
 	Vector3d ball_velocity;
 	Vector3d ball_velocity_prev;
 	Vector3d ball_vel_des;
+	float ball_apex = 0.0;
 
 	// Robot states
 	Vector3d ee_pos;
@@ -230,6 +231,7 @@ int main() {
 		// update ball
 		ball_position = redis_client.getEigen(BALL_POSITION_KEY);
 		ball_velocity = redis_client.getEigen(BALL_VELOCITY_KEY);
+		ball_apex = redis_client.get(BALL_APEX_KEY);
 
 		// update robot 
 		robot->setQ(redis_client.getEigen(JOINT_ANGLES_KEY));
@@ -308,9 +310,12 @@ int main() {
 			ee_pos_desired = ee_pos_init;
 			ee_pos_desired(0) = ball_position(0) ;
 			ee_pos_desired(1) = ball_position(1) ;
-			ee_ori_desired = ee_ori_init;
-
 			pose_task->setGoalPosition(ee_pos_desired);
+
+			ee_ori_desired = ee_ori_init;
+			float theta = 10.0*M_PI/180.0;
+			ee_ori_desired = AngleAxisd(theta, ee_ori_init.col(1)).toRotationMatrix() * ee_ori_init;
+			pose_task->setGoalOrientation(ee_ori_desired);
 
 			// ee_vel_desired(0) = ball_velocity(0);
 			// ee_vel_desired(1) = ball_velocity(1);
@@ -322,23 +327,29 @@ int main() {
 
 			command_torques = pose_task->computeTorques() + joint_task->computeTorques();
 
-			if (abs(ball_position(2) - ee_pos(2)) < 0.15) {
-				cout << "Ball Close Detected" << endl;
+			if (ball_valid && ball_velocity(2) > 0.1 && ball_apex > 0.1) {
+				cout << "Ball Going up" << endl;
 				cout << "WAITING TO MOVING UP" << endl;
-
-				// compliant in Z direction
-				kp_xyz(2) = 20.0;
-				kv_xyz(2) = 20.0;
-				kp_ori_xyz(1) = 20.0;
-				pose_task->setPosControlGains(kp_xyz, kv_xyz);
-				pose_task->setOriControlGains(kp_ori_xyz, kv_ori_xyz);
-
-				ball_vel_des = ball_velocity;
 
 				// state = MOTION_UP;
 				cout << "["<< state << "]" << endl;
 			}
 		} else if (state == MOTION_UP) {
+			// position goals 
+			ee_pos_desired(0) = ball_position(0);
+			ee_pos_desired(1) = ball_position(1);
+			ee_pos_desired(2) = ball_apex + 0.2;
+			pose_task->setGoalPosition(ee_pos_desired);
+
+			// orientation goals
+			// q1 is angle to make up for x error, rotates about ee y
+			float q1 = atan( (ball_position(0)- ee_pos_init(0))/ (ee_pos_init(2))) / 2.0;
+			ee_ori_desired = AngleAxisd(q1, ee_ori_init.col(0)).toRotationMatrix() * ee_ori_desired;   // Check if ee_ori_init.col(0) is correct
+			// q2 is angle to make up for y error, rotates about ee x
+			float q2 = atan( (ball_position(1)- ee_pos_init(1))/ (ee_pos_init(2))) / 2.0;
+			ee_ori_desired = AngleAxisd(q2, -ee_ori_init.col(1)).toRotationMatrix() * ee_ori_desired;  // Check if -ee_ori_init.col(1) is correct
+			pose_task->setGoalOrientation(ee_ori_desired);
+
 			// update task model
 			N_prec.setIdentity();
 			pose_task->updateTaskModel(N_prec);
@@ -346,31 +357,21 @@ int main() {
 
 			command_torques = pose_task->computeTorques() + joint_task->computeTorques();
 
-			if (ball_velocity(2) < .1 || abs(ee_pos(2) - ball_position(2)) > 0.17) {
+			if (ball_velocity(2) < .1) {
 				cout << "MOTION UP TO MOTION DOWN" << endl;
 
-				// clear values for next motion
-				pose_task->reInitializeTask();
-				joint_task->reInitializeTask();
-
-				// set up new gains
-				kp_xyz(2) = 400.0;
-				kv_xyz(2) = 100.0;
-				kp_ori_xyz(1) = 200.0;
-				pose_task->setPosControlGains(kp_xyz, kv_xyz);
-				pose_task->setOriControlGains(kp_ori_xyz, kv_ori_xyz);
-
 				ee_pos_desired = ee_pos_init;
-				ee_pos_desired(2) -= 0.1;
-				ee_vel_desired << 0, 0, -ball_vel_des(2);
-				ee_ori_desired = ee_ori_init;
-				q_desired = robot_q_init;
-
-				// pose_task->disableInternalOtg();
-
+				ee_pos_desired(0) = 0.5* (ee_pos(0) - ee_pos_init(0));
+				ee_pos_desired(1) = 0.5* (ee_pos(1) - ee_pos_init(1));
+				ee_pos_desired(2) = ee_pos(2) - 0.05;
 				pose_task->setGoalPosition(ee_pos_desired);
-				pose_task->setGoalLinearVelocity(ee_vel_desired);
+
+				float theta = -30.0*M_PI/180.0;
+				ee_ori_desired = ee_ori_init;
+				ee_ori_desired = AngleAxisd(theta, ee_ori_init.col(1)).toRotationMatrix() * ee_ori_init;
 				pose_task->setGoalOrientation(ee_ori_desired);
+
+			
 				joint_task->setGoalPosition(q_desired);
 
 				state = MOTION_DOWN;
@@ -385,20 +386,9 @@ int main() {
 
 			command_torques = pose_task->computeTorques() + joint_task->computeTorques();
 
-			if (abs(ee_pos(2) - ee_pos_desired(2)) < 0.05) {
+			if (abs(ball_position - ee_pos) > 0.3) {
 				cout << "MOTION DOWN TO WAITING" << endl;
 				dribble_count += 1.0;
-				pose_task->reInitializeTask();
-				joint_task->reInitializeTask();
-
-				ee_pos_desired = ee_pos_init;
-				ee_vel_desired = ee_vel_init;
-				ee_ori_desired = ee_ori_init;
-				q_desired = robot_q_init;
-
-				pose_task->setGoalPosition(ee_pos_desired);
-				pose_task->setGoalOrientation(ee_ori_desired);
-				joint_task->setGoalPosition(q_desired);
 
 				state = WAITING;
 				cout << "["<< state << "]" << endl;
@@ -475,9 +465,9 @@ int main() {
 
         } else if (state == TEST5) {
 			// q1 is angle to make up for x error, rotates about ee y
-			float q1 = atan( (ball_position(0)- ee_pos_init(0))/ (ee_pos_init(2)));
+			float q1 = atan( (ball_position(0)- ee_pos_init(0))/ (ee_pos_init(2))) / 2.0;
 			// q2 is angle to make up for y error, rotates about ee x
-			float q2 = atan( (ball_position(1)- ee_pos_init(1))/ (ee_pos_init(2)));
+			float q2 = atan( (ball_position(1)- ee_pos_init(1))/ (ee_pos_init(2))) / 2.0;
 
 			ee_pos_desired = ee_pos_init;
 
@@ -510,9 +500,9 @@ int main() {
 			ee_ori_desired = AngleAxisd(theta, ee_ori_init.col(1)).toRotationMatrix() * ee_ori_init;
 
 			// q1 is angle to make up for x error, rotates about ee y
-			float q1 = atan( (ball_position(0)- ee_pos_init(0))/ (ee_pos_init(2)));
+			float q1 = atan( (ball_position(0)- ee_pos_init(0))/ (ee_pos_init(2))) / 2.0;
 			// q2 is angle to make up for y error, rotates about ee x
-			float q2 = atan( (ball_position(1)- ee_pos_init(1))/ (ee_pos_init(2)));
+			float q2 = atan( (ball_position(1)- ee_pos_init(1))/ (ee_pos_init(2))) / 2.0;
 
 			ee_ori_desired = AngleAxisd(q1, ee_ori_init.col(0)).toRotationMatrix() * ee_ori_desired;   // Check if ee_ori_init.col(0) is correct
 			ee_ori_desired = AngleAxisd(q2, -ee_ori_init.col(1)).toRotationMatrix() * ee_ori_desired;  // Check if -ee_ori_init.col(1) is correct
