@@ -23,7 +23,7 @@ void sighandler(int){runloop = false;}
 #include "redis_keys.h"
 
 
-bool simulation = false;
+bool simulation = true;
 
 
 
@@ -67,8 +67,8 @@ int main() {
 	// "1" = test up down, "2" = test orientation speed, "3" = test up down with orientation, 
 	// "4" = test3 plus tracking the ball, "5" = orientation incline, "6" = test3 plus tracking the ball and orientation,
 	// "7" = waiting
-	string controller_status = "1"; 
-	double freq = 2.5; // 7.5 was tried and worked
+	string controller_status = "7"; 
+	double freq = 4.5; // 7.5 was tried and worked
 
 	// start redis client
 	auto redis_client = SaiCommon::RedisClient();
@@ -82,7 +82,7 @@ int main() {
 	// // Define Information
 	// Ball information
 	Vector3d ball_position;
-	vecotr3d ball_position_prev;
+	Vector3d ball_position_prev;
 	Vector3d ball_velocity;
 	Vector3d ball_velocity_prev;
 	Vector3d ball_vel_des;
@@ -202,8 +202,8 @@ int main() {
 	ee_ori_desired = ee_ori_init;
 	q_desired = robot_q_init;
 
-	q_desired << 1.46298,-0.246285,0.030638,-2.07553,0.0518735,1.84324,0.679142; // Read from redis with: "sai::sim::PANDA::sensors::q"
-	// q_desired << 1.91256,0.40495,0.333675,-1.48236,-0.137048,1.98399,0.468571;
+	// q_desired << 1.46298,-0.246285,0.030638,-2.07553,0.0518735,1.84324,0.679142; // Read from redis with: "sai::sim::PANDA::sensors::q" reading from when pointing at Y-AXIS
+	// q_desired << 1.91256,0.40495,0.333675,-1.48236,-0.137048,1.98399,0.468571;    // Define this in new setup
 
 	// Set tasks
 	pose_task->setGoalPosition(ee_pos_desired);
@@ -231,7 +231,7 @@ int main() {
 		// update ball
 		ball_position = redis_client.getEigen(BALL_POSITION_KEY);
 		ball_velocity = redis_client.getEigen(BALL_VELOCITY_KEY);
-		ball_apex = redis_client.get(BALL_APEX_KEY);
+		ball_apex = stof(redis_client.get(BALL_APEX_KEY));
 
 		// update robot 
 		robot->setQ(redis_client.getEigen(JOINT_ANGLES_KEY));
@@ -253,12 +253,11 @@ int main() {
 		ee_moments = pose_task->getSensedMomentControlWorldFrame();
 
 		// Checking if ball is valid: in range and not anomalies
-		if (ball_position(0) > -0.4 && ball_position(0) < 0.4 && ball_position(1) > 0.3 && ball_position(1) < 0.9) {
+		if (ball_position(0) > 0.3 && ball_position(0) < 0.9 && ball_position(1) > -0.4 && ball_position(1) < 0.4) {
 			ball_valid = true;
 		} else {
 			ball_valid = false;
 		}
-		
 
 
 		if (state == POSTURE) {
@@ -323,7 +322,6 @@ int main() {
 			float q2 = atan( (ball_position(1)- ee_pos_init(1))/ (ee_pos_init(2))) / 2.0;
 			ee_ori_desired = AngleAxisd(q2, -ee_ori_init.col(1)).toRotationMatrix() * ee_ori_desired;  // Check if -ee_ori_init.col(1) is correct
 			pose_task->setGoalOrientation(ee_ori_desired);
-			pose_task->setGoalOrientation(ee_ori_desired);
 
 			// ee_vel_desired(0) = ball_velocity(0);
 			// ee_vel_desired(1) = ball_velocity(1);
@@ -335,11 +333,13 @@ int main() {
 
 			command_torques = pose_task->computeTorques() + joint_task->computeTorques();
 
+			cout << "Ball Valid: " << ball_valid << ". Ball Velocity z: " << ball_velocity(2) << " Ball Apex: " << ball_apex << endl;
+
 			if (ball_valid && ball_velocity(2) > 0.1 && ball_apex > 0.1) {
 				cout << "Ball Going up" << endl;
 				cout << "WAITING TO MOVING UP" << endl;
 
-				// state = MOTION_UP;
+				state = MOTION_UP;
 				cout << "["<< state << "]" << endl;
 			}
 		} else if (state == MOTION_UP) {
@@ -371,7 +371,7 @@ int main() {
 				ee_pos_desired = ee_pos_init;
 				ee_pos_desired(0) = 0.5* (ee_pos(0) - ee_pos_init(0));
 				ee_pos_desired(1) = 0.5* (ee_pos(1) - ee_pos_init(1));
-				ee_pos_desired(2) = ee_pos(2) - 0.05;
+				ee_pos_desired(2) = 0;
 				pose_task->setGoalPosition(ee_pos_desired);
 
 				float theta = -30.0*M_PI/180.0;
@@ -394,7 +394,7 @@ int main() {
 
 			command_torques = pose_task->computeTorques() + joint_task->computeTorques();
 
-			if (abs(ball_position - ee_pos) > 0.3) {
+			if ((ball_position - ee_pos).norm() > 0.3) {
 				cout << "MOTION DOWN TO WAITING" << endl;
 				dribble_count += 1.0;
 

@@ -105,7 +105,7 @@ int main() {
 
 	// set ball information
 	ball_position << 0.575, 0.0, 0.0;
-	ball_velocity << 0.0, 0.0, 0.0; // 2.8 from 0.0 to reach softly
+	ball_velocity << 0.0, 0.0, 3.0; // 2.8 from 0.0 to reach softly
 	ball_spin << 0.0, 0.0, 0.0;
 	ball_pose = Affine3d::Identity();
 	ball_pose.translation() = ball_position;
@@ -214,6 +214,21 @@ void simulation(std::shared_ptr<SaiSimulation::SaiSimulation> sim) {
 		// ball
 		redis_client.setEigen(BALL_POSITION_KEY, ball_position);
 		redis_client.setEigen(BALL_VELOCITY_KEY, ball_velocity);
+
+		// compute and set apex
+		double g = 9.81; 
+		double vz = ball_velocity[2];  
+		double z_current = ball_position[2];
+		double z_apex;
+
+		if (vz > 0) {
+			z_apex = z_current + (vz * vz) / (2 * g);
+		} else {
+			z_apex = 0.0;
+		}
+
+		redis_client.set(BALL_APEX_KEY, to_string(z_apex));
+
 	}
 	timer.stop();
 	cout << "\nSimulation loop timer stats:\n";
