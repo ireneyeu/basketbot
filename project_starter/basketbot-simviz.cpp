@@ -49,7 +49,7 @@ const int n_objects = object_names.size();
 
 // Force sensor information
 const string link_name = "end-effector";
-const Vector3d control_point = Vector3d(-0.13, 0, 0.0);
+const Vector3d control_point = Vector3d(0.0, 0, 0.0);
 Affine3d compliant_frame = Affine3d::Identity();
 Vector3d sensed_force;
 Vector3d sensed_moment;
@@ -104,8 +104,8 @@ int main() {
 	}
 
 	// set ball information
-	ball_position << 0.575, 0.0, 0.0;
-	ball_velocity << 0.0, 0.0, 3.0; // 2.8 from 0.0 to reach softly
+	ball_position << 0.575, 0.0, -0.1;
+	ball_velocity << 0.0, 0.0, -3.0; // 2.8 from 0.0 to reach softly
 	ball_spin << 0.0, 0.0, 0.0;
 	ball_pose = Affine3d::Identity();
 	ball_pose.translation() = ball_position;
@@ -178,7 +178,7 @@ void simulation(std::shared_ptr<SaiSimulation::SaiSimulation> sim) {
 	double sim_freq = 2000; // should be 2000
 	SaiCommon::LoopTimer timer(sim_freq);
 
-	sim->setTimestep(1.0 / sim_freq); // 0.1 is 10 times slower sim, 1.0 is real time
+	sim->setTimestep(0.2 / sim_freq); // 0.1 is 10 times slower sim, 1.0 is real time
 	sim->enableGravityCompensation(true);
 	sim->enableJointLimits(robot_name);
 

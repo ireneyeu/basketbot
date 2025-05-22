@@ -145,7 +145,7 @@
 		</inertial>
 		<visual>
 			<geometry>
-				<box size="0.34 0.15 0.02" /> <!-- END EFFECTOR SHAPE -->
+				<box size="0.50 0.20 0.02" /> <!-- END EFFECTOR SHAPE -->
 			</geometry>
 			<material name="material_grey">
 				<color rgba="0.75 0.75 0.75 1.0" />
@@ -153,7 +153,7 @@
 		</visual>
 		<collision>
 			<geometry>
-				<box size="0.38 0.15 0.02" /> <!-- END EFFECTOR SHAPE -->
+				<box size="0.50 0.20 0.02" /> <!-- END EFFECTOR SHAPE -->
 			</geometry>
 		</collision>
 	</link>
@@ -221,7 +221,7 @@
 		<limit effort="12" lower="-2.8973" upper="2.8973" velocity="2.6100"/>
 	</joint>
 	<joint name="joint_ee" type="fixed">
-		<origin rpy="0 0 0.785" xyz="0.0 0.0 0.0"/>
+		<origin rpy="0 0 0.785" xyz="0.0 0.0 0.12"/>
 		<parent link="link7"/>
 		<child link="end-effector"/>
 	</joint>

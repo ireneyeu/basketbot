@@ -168,7 +168,7 @@ try:
                                             [1, 0, 0],
                                             [0, 0, 1],
                                             [0, -1, 0] ])     ## Check in new setup
-                t_cam_to_world = np.array([0.5, -1.8, 0.4])    ## Check in new setup
+                t_cam_to_world = np.array([0.5, -1.8, 0.5])    ## Check in new setup
                 p_world = R_cam_to_world @ p_cam + t_cam_to_world
                 
                 # Compute velocity with exponential smoothing

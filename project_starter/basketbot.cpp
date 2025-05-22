@@ -23,7 +23,7 @@ void sighandler(int){runloop = false;}
 #include "redis_keys.h"
 
 
-bool simulation = false;
+bool simulation = true;
 
 
 
@@ -68,7 +68,7 @@ int main() {
 	// "1" = test up down, "2" = test orientation speed, "3" = test up down with orientation, 
 	// "4" = test3 plus tracking the ball, "5" = orientation incline, "6" = test3 plus tracking the ball and orientation,
 	// "7" = waiting
-	string controller_status = "3"; 
+	string controller_status = "7"; 
 	float freq = 8.5; // 7.5 was tried and worked
 
 	// start redis client
@@ -93,6 +93,7 @@ int main() {
 	Vector3d ee_pos;
 	Vector3d ee_vel;
 	Matrix3d ee_ori;
+	bool ee_valid = true;
 	VectorXd robot_q(7);
 	VectorXd robot_dq(7);
 	Vector3d EE_FORCES;
@@ -128,7 +129,7 @@ int main() {
 	// Initial robot state
 	//ee_pos_init << 0.0, 0.575, 0.328;
 
-	//ee_pos_init << 0.15, 0.6, 0.4;
+	ee_pos_init << 0.5, 0.0, 0.6;
 	ee_vel_init = Vector3d::Zero();
 	ee_ori_init << 1, 0, 0,
 					0, -1, 0,
@@ -200,7 +201,7 @@ int main() {
 	// Set Gains
 	kp_xyz = Vector3d(100.0, 100.0, 100.0);
 	kv_xyz = Vector3d(20.0, 20.0, 20.0);
-	kp_ori_xyz = Vector3d(100.0, 100.0, 100.0);
+	kp_ori_xyz = Vector3d(150.0, 150.0, 150.0);
 	kv_ori_xyz = Vector3d(20.0, 20.0, 20.0);
 
 	// kp_xyz = Vector3d(50.0, 50.0, 50.0);
@@ -278,10 +279,18 @@ int main() {
 		ee_moments = pose_task->getSensedMomentControlWorldFrame();
 
 		// Checking if ball is valid: in range and not anomalies
-		if (ball_position(0) > 0.3 && ball_position(0) < 0.9 && ball_position(1) > -0.4 && ball_position(1) < 0.4) {
+		if (ball_position(0) > 0.1 && ball_position(0) < 1.0 && ball_position(1) > -0.8 && ball_position(1) < 0.8) {
 			ball_valid = true;
 		} else {
 			ball_valid = false;
+			state = POSTURE;
+		}
+
+		if (ee_pos(0) > 0.3 && ee_pos(0) < 0.8 && ee_pos(1) > -0.6 && ee_pos(1) < 0.6 && ee_pos(2) > 0.05 && ee_pos(2) < 0.6 ) {
+			ee_valid = true;
+		} else {
+			ee_valid = false;
+			state = POSTURE;
 		}
 
 
@@ -324,9 +333,15 @@ int main() {
 					cout << ball_position.transpose() << endl;
 					state = TEST6;
 				} else if (controller_status == "7") {
-					cout << "TEST7: Following ball in waiting" << endl;
-					cout << ball_position.transpose() << endl;
-					state = WAITING;
+					if (ball_valid && ee_valid){
+						cout << "TEST7: Following ball in waiting" << endl;
+						cout << ball_position.transpose() << endl;
+						state = WAITING;
+					} else if (!ee_valid){
+						cout << "BAD EE: " << ee_pos.transpose() << endl;
+					} else if (!ball_valid){
+						cout << "BAD BALL: " << ball_position.transpose() << endl;
+					}
 				}
 			}
 		}
@@ -334,13 +349,13 @@ int main() {
 		if (state == WAITING) {
 			// update task model 
 			ee_pos_desired = ee_pos_init;
-			ee_pos_desired(0) = ball_position(0) ;
+			ee_pos_desired(0) = ball_position(0) - 0.20;
 			ee_pos_desired(1) = ball_position(1) ;
 			pose_task->setGoalPosition(ee_pos_desired);
 
 			// orientation goals
 			ee_ori_desired = ee_ori_init;
-			float theta = 10.0*M_PI/180.0;
+			float theta = 0.0*M_PI/180.0;
 			ee_ori_desired = AngleAxisd(theta, ee_ori_init.col(1)).toRotationMatrix() * ee_ori_init;
 			// q1 is angle to make up for x error, rotates about ee y
 			float q1 = atan( (ball_position(0)- ee_pos_init(0))/ (ee_pos_init(2))) / 2.0;
@@ -360,8 +375,6 @@ int main() {
 
 			command_torques = pose_task->computeTorques() + joint_task->computeTorques();
 
-			cout << "Ball Valid: " << ball_valid << ". Ball Velocity z: " << ball_velocity(2) << " Ball Apex: " << ball_apex << endl;
-
 			if (ball_valid && ball_velocity(2) > 0.1 && ball_apex > 0.1) {
 				cout << "Ball Going up" << endl;
 				cout << "WAITING TO MOVING UP" << endl;
@@ -371,9 +384,9 @@ int main() {
 			}
 		} else if (state == MOTION_UP) {
 			// position goals 
-			ee_pos_desired(0) = ball_position(0);
+			ee_pos_desired(0) = ball_position(0) - 0.20;
 			ee_pos_desired(1) = ball_position(1);
-			ee_pos_desired(2) = min(ball_apex + 0.2, ee_pos_init(2) + 0.1);
+			ee_pos_desired(2) = min(ball_apex + 0.2, ee_pos_init(2) + 0.05);
 			pose_task->setGoalPosition(ee_pos_desired);
 
 			// orientation goals
@@ -395,17 +408,16 @@ int main() {
 			if (ball_velocity(2) < .1) {
 				cout << "MOTION UP TO MOTION DOWN" << endl;
 
-				ee_pos_desired = ee_pos_init;
-				ee_pos_desired(0) = 0.5* (ee_pos(0) - ee_pos_init(0));
-				ee_pos_desired(1) = 0.5* (ee_pos(1) - ee_pos_init(1));
-				ee_pos_desired(2) = -0.2;
-				pose_task->setGoalPosition(ee_pos_desired);
-
-				float theta = -30.0*M_PI/180.0;
+				float theta = -20.0*M_PI/180.0;
 				ee_ori_desired = ee_ori_init;
 				ee_ori_desired = AngleAxisd(theta, ee_ori_init.col(1)).toRotationMatrix() * ee_ori_init;
 				pose_task->setGoalOrientation(ee_ori_desired);
 
+				ee_pos_desired = ee_pos_init;
+				ee_pos_desired(0) = 0.5* (ee_pos(0) + ee_pos_init(0));
+				ee_pos_desired(1) = 0.5* (ee_pos(1) + ee_pos_init(1));
+				ee_pos_desired(2) = -0.2;
+				pose_task->setGoalPosition(ee_pos_desired);
 			
 				joint_task->setGoalPosition(q_desired);
 
@@ -481,18 +493,20 @@ int main() {
 			ee_pos_desired = ee_pos_init;
 			ee_pos_desired(0) = ball_position(0) + 0.12;
 			ee_pos_desired(1) = ball_position(1) ;
+			ee_pos_desired(2) = ball_position(2) + 0.30;
+			cout << ee_pos_desired(2) << ball_position(2) << endl;
             // ee_pos_desired(2) = ee_pos_init(2) + 0.02 * sin(freq*(time - time_start));
 
-			ee_vel_desired(0) = ball_velocity(0);
-			ee_vel_desired(1) = ball_velocity(1);
-			ee_vel_desired(2) = 0.0;
+			// ee_vel_desired(0) = ball_velocity(0);
+			// ee_vel_desired(1) = ball_velocity(1);
+			// ee_vel_desired(2) = 0.0;
 
 			float theta = -3*M_PI/180.0 + 20.0*M_PI/180.0 * sin(freq*(time - time_start));
 			// ee_ori_desired = AngleAxisd(theta, ee_ori_init.col(1)).toRotationMatrix() * ee_ori_init;
 
 			pose_task->setGoalPosition(ee_pos_desired);
 			// pose_task->setGoalOrientation(ee_ori_desired);
-			pose_task->setGoalLinearVelocity(ee_vel_desired);
+			// pose_task->setGoalLinearVelocity(ee_vel_desired);
             N_prec.setIdentity();
             pose_task->updateTaskModel(N_prec);
             joint_task->updateTaskModel(pose_task->getTaskAndPreviousNullspace());
