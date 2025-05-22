@@ -54,6 +54,10 @@ bbox = None
 tracking = False
 
 try:
+    import time
+    yolo_refresh_interval = 3.0  # seconds
+    last_yolo_refresh_time = time.time()
+
     while True:
         frames = pipeline.wait_for_frames()
         color_frame = frames.get_color_frame()
@@ -81,6 +85,38 @@ try:
                     break
         else:
             success, bbox = tracker.update(color_image)
+
+            # Periodically re-run YOLO to correct drift
+            if time.time() - last_yolo_refresh_time >= yolo_refresh_interval:
+                yolo_results = model(color_image)
+                last_yolo_refresh_time = time.time()
+
+                for r in yolo_results:
+                    for box in r.boxes:
+                        cls_id = int(box.cls[0])
+                        label = model.names[cls_id]
+                        if label == "sports ball":
+                            x1, y1, x2, y2 = map(int, box.xyxy[0])
+                            new_bbox = (x1, y1, x2 - x1, y2 - y1)
+
+                            # Optional: check if the YOLO bbox is near the current one
+                            iou_threshold = 0.3
+                            def iou(boxA, boxB):
+                                xA = max(boxA[0], boxB[0])
+                                yA = max(boxA[1], boxB[1])
+                                xB = min(boxA[0] + boxA[2], boxB[0] + boxB[2])
+                                yB = min(boxA[1] + boxA[3], boxB[1] + boxB[3])
+                                interArea = max(0, xB - xA) * max(0, yB - yA)
+                                boxAArea = boxA[2] * boxA[3]
+                                boxBArea = boxB[2] * boxB[3]
+                                return interArea / float(boxAArea + boxBArea - interArea)
+
+                            if success and iou(bbox, new_bbox) > iou_threshold:
+                                tracker = create_tracker()
+                                tracker.init(color_image, new_bbox)
+                                bbox = new_bbox
+                            break
+
             if success:
                 x, y, w, h = map(int, bbox)
                 cx, cy = x + w // 2, y + h // 2
