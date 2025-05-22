@@ -69,7 +69,7 @@ int main() {
 	// "4" = test3 plus tracking the ball, "5" = orientation incline, "6" = test3 plus tracking the ball and orientation,
 	// "7" = waiting
 	string controller_status = "3"; 
-	double freq = 8.5; // 7.5 was tried and worked
+	float freq = 8.5; // 7.5 was tried and worked
 
 	// start redis client
 	auto redis_client = SaiCommon::RedisClient();
@@ -373,7 +373,7 @@ int main() {
 			// position goals 
 			ee_pos_desired(0) = ball_position(0);
 			ee_pos_desired(1) = ball_position(1);
-			ee_pos_desired(2) = ball_apex + 0.2;
+			ee_pos_desired(2) = min(ball_apex + 0.2, ee_pos_init(2) + 0.1);
 			pose_task->setGoalPosition(ee_pos_desired);
 
 			// orientation goals
@@ -398,7 +398,7 @@ int main() {
 				ee_pos_desired = ee_pos_init;
 				ee_pos_desired(0) = 0.5* (ee_pos(0) - ee_pos_init(0));
 				ee_pos_desired(1) = 0.5* (ee_pos(1) - ee_pos_init(1));
-				ee_pos_desired(2) = 0;
+				ee_pos_desired(2) = -0.2;
 				pose_task->setGoalPosition(ee_pos_desired);
 
 				float theta = -30.0*M_PI/180.0;
