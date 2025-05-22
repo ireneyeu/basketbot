@@ -23,7 +23,7 @@ void sighandler(int){runloop = false;}
 #include "redis_keys.h"
 
 
-bool simulation = true;
+bool simulation = false;
 
 
 
@@ -57,6 +57,7 @@ int main() {
 		JOINT_ANGLES_KEY = "sai::sensors::FrankaRobot::joint_positions";
 		BALL_POSITION_KEY = "sai::camera::BALL::sensors::position";
  		BALL_VELOCITY_KEY = "sai::camera::BALL::sensors::velocity";
+		MASS_MATRIX_KEY = "sai::sensors::FrankaRobot::model::mass_matrix";
 	}
 
 	// Location of URDF files specifying world and robot information
@@ -67,8 +68,8 @@ int main() {
 	// "1" = test up down, "2" = test orientation speed, "3" = test up down with orientation, 
 	// "4" = test3 plus tracking the ball, "5" = orientation incline, "6" = test3 plus tracking the ball and orientation,
 	// "7" = waiting
-	string controller_status = "7"; 
-	double freq = 4.5; // 7.5 was tried and worked
+	string controller_status = "3"; 
+	double freq = 8.5; // 7.5 was tried and worked
 
 	// start redis client
 	auto redis_client = SaiCommon::RedisClient();
@@ -127,13 +128,15 @@ int main() {
 	// Initial robot state
 	//ee_pos_init << 0.0, 0.575, 0.328;
 
-	ee_pos_init << 0.15, 0.6, 0.4;
+	//ee_pos_init << 0.15, 0.6, 0.4;
 	ee_vel_init = Vector3d::Zero();
 	ee_ori_init << 1, 0, 0,
 					0, -1, 0,
 					0, 0, -1;
 	robot_q_init << 0.0, -25.0, 0.0, -135.0, 0.0, 105.0, 0.0;
 	robot_q_init *= M_PI/180.0;
+
+	//robot_q_init << -0.187152,-0.304383,0.0116979,-2.26485,0.129158,2.14633,-0.799659;
 	robot_dq_init = VectorXd::Zero(7);
 
 
@@ -167,7 +170,15 @@ int main() {
 		redis_client.setEigen(EE_MOMENTS_KEY, EE_MOMENTS);
 	}
 
-	robot->updateModel();
+	MatrixXd M = robot->M();
+	if(!simulation) {
+		M = redis_client.getEigen(MASS_MATRIX_KEY);
+		// bie addition
+		M(4,4) += 0.2;
+		M(5,5) += 0.2;
+		M(6,6) += 0.2;
+	}
+	robot->updateModel(M);
 
 	// prepare controllers
 	int dof = robot->dof();
@@ -177,7 +188,7 @@ int main() {
 	// arm task
 	const string control_link = "end-effector";
 	//const Vector3d control_point = Vector3d(0.05, 0, 0.13); // NEED TO CHECK CONTROL POINT
-	const Vector3d control_point = Vector3d(-0.13, 0, 0.0);
+	const Vector3d control_point = Vector3d(0, 0, 0.0);
 	Affine3d compliant_frame = Affine3d::Identity();
 	compliant_frame.translation() = control_point;
 	auto pose_task = std::make_shared<SaiPrimitives::MotionForceTask>(robot, control_link, compliant_frame);
@@ -192,6 +203,11 @@ int main() {
 	kp_ori_xyz = Vector3d(100.0, 100.0, 100.0);
 	kv_ori_xyz = Vector3d(20.0, 20.0, 20.0);
 
+	// kp_xyz = Vector3d(50.0, 50.0, 50.0);
+	// kv_xyz = Vector3d(5.0, 5.0, 5.0);
+	// kp_ori_xyz = Vector3d(50.0, 50.0, 50.0);
+	// kv_ori_xyz = Vector3d(5.0, 5.0, 5.0);
+
 	pose_task->setPosControlGains(kp_xyz, kv_xyz);
 	pose_task->setOriControlGains(kp_ori_xyz, kv_ori_xyz);
 	joint_task->setGains(50, 14, 0);
@@ -204,6 +220,7 @@ int main() {
 
 	// q_desired << 1.46298,-0.246285,0.030638,-2.07553,0.0518735,1.84324,0.679142; // Read from redis with: "sai::sim::PANDA::sensors::q" reading from when pointing at Y-AXIS
 	// q_desired << 1.91256,0.40495,0.333675,-1.48236,-0.137048,1.98399,0.468571;    // Define this in new setup
+	q_desired << -0.0389406,-0.25928,-0.0295874,-2.13659,-0.00835724,1.91865,-0.759372;
 
 	// Set tasks
 	pose_task->setGoalPosition(ee_pos_desired);
@@ -236,7 +253,15 @@ int main() {
 		// update robot 
 		robot->setQ(redis_client.getEigen(JOINT_ANGLES_KEY));
 		robot->setDq(redis_client.getEigen(JOINT_VELOCITIES_KEY));
-		robot->updateModel();
+		M = robot->M();
+		if(!simulation) {
+			M = redis_client.getEigen(MASS_MATRIX_KEY);
+			// bie addition
+			M(4,4) += 0.2;
+			M(5,5) += 0.2;
+			M(6,6) += 0.2;
+		}
+		robot->updateModel(M);
 
 		// robot states
 		ee_pos = robot->position(control_link, control_point);
@@ -258,6 +283,8 @@ int main() {
 		} else {
 			ball_valid = false;
 		}
+
+
 
 
 		if (state == POSTURE) {
@@ -317,10 +344,10 @@ int main() {
 			ee_ori_desired = AngleAxisd(theta, ee_ori_init.col(1)).toRotationMatrix() * ee_ori_init;
 			// q1 is angle to make up for x error, rotates about ee y
 			float q1 = atan( (ball_position(0)- ee_pos_init(0))/ (ee_pos_init(2))) / 2.0;
-			ee_ori_desired = AngleAxisd(q1, ee_ori_init.col(0)).toRotationMatrix() * ee_ori_desired;   // Check if ee_ori_init.col(0) is correct
+			ee_ori_desired = AngleAxisd(q1, -ee_ori_init.col(1)).toRotationMatrix() * ee_ori_desired;   // Check if ee_ori_init.col(0) is correct
 			// q2 is angle to make up for y error, rotates about ee x
 			float q2 = atan( (ball_position(1)- ee_pos_init(1))/ (ee_pos_init(2))) / 2.0;
-			ee_ori_desired = AngleAxisd(q2, -ee_ori_init.col(1)).toRotationMatrix() * ee_ori_desired;  // Check if -ee_ori_init.col(1) is correct
+			ee_ori_desired = AngleAxisd(q2, -ee_ori_init.col(0)).toRotationMatrix() * ee_ori_desired;  // Check if -ee_ori_init.col(1) is correct
 			pose_task->setGoalOrientation(ee_ori_desired);
 
 			// ee_vel_desired(0) = ball_velocity(0);
@@ -352,10 +379,10 @@ int main() {
 			// orientation goals
 			// q1 is angle to make up for x error, rotates about ee y
 			float q1 = atan( (ball_position(0)- ee_pos_init(0))/ (ee_pos_init(2))) / 2.0;
-			ee_ori_desired = AngleAxisd(q1, ee_ori_init.col(0)).toRotationMatrix() * ee_ori_desired;   // Check if ee_ori_init.col(0) is correct
+			ee_ori_desired = AngleAxisd(q1, -ee_ori_init.col(1)).toRotationMatrix() * ee_ori_desired;   // Check if ee_ori_init.col(0) is correct
 			// q2 is angle to make up for y error, rotates about ee x
 			float q2 = atan( (ball_position(1)- ee_pos_init(1))/ (ee_pos_init(2))) / 2.0;
-			ee_ori_desired = AngleAxisd(q2, -ee_ori_init.col(1)).toRotationMatrix() * ee_ori_desired;  // Check if -ee_ori_init.col(1) is correct
+			ee_ori_desired = AngleAxisd(q2, -ee_ori_init.col(0)).toRotationMatrix() * ee_ori_desired;  // Check if -ee_ori_init.col(1) is correct
 			pose_task->setGoalOrientation(ee_ori_desired);
 
 			// update task model
@@ -394,7 +421,7 @@ int main() {
 
 			command_torques = pose_task->computeTorques() + joint_task->computeTorques();
 
-			if ((ball_position - ee_pos).norm() > 0.3) {
+			if ((ball_position - ee_pos).norm() > 0.3 || ee_pos(2) < ee_pos_init(2)-0.05 ) {
 				cout << "MOTION DOWN TO WAITING" << endl;
 				dribble_count += 1.0;
 
@@ -402,6 +429,7 @@ int main() {
 				cout << "["<< state << "]" << endl;
 			}
 		} else if (state == TEST1) {
+			ee_pos_desired = ee_pos_init;
             ee_pos_desired(2) = ee_pos_init(2) + 0.1 * sin(freq*(time - time_start));
 
 			ee_vel_desired(0) = 0;
@@ -432,13 +460,13 @@ int main() {
             command_torques = pose_task->computeTorques() + joint_task->computeTorques();
         } else if (state == TEST3) {
 			ee_pos_desired = ee_pos_init;
-            ee_pos_desired(2) = ee_pos_init(2) + 0.02 * sin(freq*(time - time_start));
+            ee_pos_desired(2) = ee_pos_init(2) + 0.03 * sin(freq*(time - time_start));
 
 			ee_vel_desired(0) = 0;
 			ee_vel_desired(1) = 0;
-			ee_vel_desired(2) = 0.02*freq*cos(freq*(time - time_start));
+			ee_vel_desired(2) = 0.03*freq*cos(freq*(time - time_start));
 
-			float theta = -3*M_PI/180.0 + 20.0*M_PI/180.0 * sin(freq*(time - time_start));
+			float theta = 5.0*M_PI/180.0 + 25.0*M_PI/180.0 * sin(freq*(time - time_start));
 			ee_ori_desired = AngleAxisd(theta, ee_ori_init.col(1)).toRotationMatrix() * ee_ori_init;
 
 			pose_task->setGoalPosition(ee_pos_desired);
@@ -451,19 +479,19 @@ int main() {
             command_torques = pose_task->computeTorques() + joint_task->computeTorques();
         } else if (state == TEST4) {
 			ee_pos_desired = ee_pos_init;
-			ee_pos_desired(0) = ball_position(0) ;
+			ee_pos_desired(0) = ball_position(0) + 0.12;
 			ee_pos_desired(1) = ball_position(1) ;
-            ee_pos_desired(2) = ee_pos_init(2) + 0.02 * sin(freq*(time - time_start));
+            // ee_pos_desired(2) = ee_pos_init(2) + 0.02 * sin(freq*(time - time_start));
 
-			ee_vel_desired(0) = 0;
-			ee_vel_desired(1) = 0;
-			ee_vel_desired(2) = 0.02*freq*cos(freq*(time - time_start));
+			ee_vel_desired(0) = ball_velocity(0);
+			ee_vel_desired(1) = ball_velocity(1);
+			ee_vel_desired(2) = 0.0;
 
 			float theta = -3*M_PI/180.0 + 20.0*M_PI/180.0 * sin(freq*(time - time_start));
-			ee_ori_desired = AngleAxisd(theta, ee_ori_init.col(1)).toRotationMatrix() * ee_ori_init;
+			// ee_ori_desired = AngleAxisd(theta, ee_ori_init.col(1)).toRotationMatrix() * ee_ori_init;
 
 			pose_task->setGoalPosition(ee_pos_desired);
-			pose_task->setGoalOrientation(ee_ori_desired);
+			// pose_task->setGoalOrientation(ee_ori_desired);
 			pose_task->setGoalLinearVelocity(ee_vel_desired);
             N_prec.setIdentity();
             pose_task->updateTaskModel(N_prec);
@@ -479,8 +507,8 @@ int main() {
 
 			ee_pos_desired = ee_pos_init;
 
-			ee_ori_desired = AngleAxisd(q1, ee_ori_init.col(0)).toRotationMatrix() * ee_ori_init;      // Check if ee_ori_init.col(0) is correct
-			ee_ori_desired = AngleAxisd(q2, -ee_ori_init.col(1)).toRotationMatrix() * ee_ori_desired;  // Check if -ee_ori_init.col(1) is correct
+			ee_ori_desired = AngleAxisd(q1, -ee_ori_init.col(1)).toRotationMatrix() * ee_ori_init;      // Check if ee_ori_init.col(0) is correct
+			ee_ori_desired = AngleAxisd(q2, -ee_ori_init.col(0)).toRotationMatrix() * ee_ori_desired;  // Check if -ee_ori_init.col(1) is correct
 			
 			pose_task->setGoalPosition(ee_pos_desired);
 			pose_task->setGoalOrientation(ee_ori_desired);
@@ -497,23 +525,24 @@ int main() {
 			ee_pos_desired = ee_pos_init;
 			ee_pos_desired(0) = ball_position(0) ;
 			ee_pos_desired(1) = ball_position(1) ;
-            ee_pos_desired(2) = ee_pos_init(2) + 0.02 * sin(freq*(time - time_start));
+            // ee_pos_desired(2) = ee_pos_init(2) + 0.02 * sin(freq*(time - time_start));
 			// velocitiy
 			ee_vel_desired(0) = 0;
 			ee_vel_desired(1) = 0;
-			ee_vel_desired(2) = 0.02*freq*cos(freq*(time - time_start));
+			ee_vel_desired(2) = 0;
+			// ee_vel_desired(2) = 0.02*freq*cos(freq*(time - time_start));
 
 			// Sine in orientation
 			float theta = -3*M_PI/180.0 + 20.0*M_PI/180.0 * sin(freq*(time - time_start));
-			ee_ori_desired = AngleAxisd(theta, ee_ori_init.col(1)).toRotationMatrix() * ee_ori_init;
+			// ee_ori_desired = AngleAxisd(theta, ee_ori_init.col(1)).toRotationMatrix() * ee_ori_init;
 
 			// q1 is angle to make up for x error, rotates about ee y
 			float q1 = atan( (ball_position(0)- ee_pos_init(0))/ (ee_pos_init(2))) / 2.0;
 			// q2 is angle to make up for y error, rotates about ee x
 			float q2 = atan( (ball_position(1)- ee_pos_init(1))/ (ee_pos_init(2))) / 2.0;
 
-			ee_ori_desired = AngleAxisd(q1, ee_ori_init.col(0)).toRotationMatrix() * ee_ori_desired;   // Check if ee_ori_init.col(0) is correct
-			ee_ori_desired = AngleAxisd(q2, -ee_ori_init.col(1)).toRotationMatrix() * ee_ori_desired;  // Check if -ee_ori_init.col(1) is correct
+			ee_ori_desired = AngleAxisd(q1, -ee_ori_init.col(1)).toRotationMatrix() * ee_ori_init;   // Check if ee_ori_init.col(0) is correct
+			ee_ori_desired = AngleAxisd(q2, -ee_ori_init.col(0)).toRotationMatrix() * ee_ori_desired;  // Check if -ee_ori_init.col(1) is correct
 
 			pose_task->setGoalPosition(ee_pos_desired);
 			pose_task->setGoalOrientation(ee_ori_desired);

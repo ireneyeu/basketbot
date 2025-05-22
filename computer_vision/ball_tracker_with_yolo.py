@@ -122,17 +122,17 @@ try:
                 ## Publish to Redis CHECK ALL THIS BLOCK #######
                 ##################################################################
                 p_cam = np.array([X, Y, Z])
-                R_cam_to_world = np.array([
-                                            [0, 0, -1],
-                                            [1, 0, 0],
-                                            [0, -1, 0] ])     # Previous setup
-                t_cam_to_world = np.array([0.5, 0.5, 0.1])     # Previous setup
+                # R_cam_to_world = np.array([
+                #                             [0, 0, -1],
+                #                             [1, 0, 0],
+                #                             [0, -1, 0] ])     # Previous setup
+                # t_cam_to_world = np.array([0.5, 0.5, 0.1])     # Previous setup
 
                 R_cam_to_world = np.array([
                                             [1, 0, 0],
                                             [0, 0, 1],
                                             [0, -1, 0] ])     ## Check in new setup
-                t_cam_to_world = np.array([1.0, 1.0, 0.5])    ## Check in new setup
+                t_cam_to_world = np.array([0.5, -1.8, 0.4])    ## Check in new setup
                 p_world = R_cam_to_world @ p_cam + t_cam_to_world
                 
                 # Compute velocity with exponential smoothing
@@ -183,7 +183,7 @@ try:
                     z_apex = 0.0
 
                 redis_client.set(BALL_APEX_KEY, str(z_apex))
-                print(f"Apex Z prediction: {z_apex:.2f} m")
+                print(f"X: {smoothed_position[0]:.2f}, Y: {smoothed_position[1]:.2f}, Z: {smoothed_position[2]:.2f}, Apex Z prediction: {z_apex:.2f} m")
 
            
                 ####################################################################
