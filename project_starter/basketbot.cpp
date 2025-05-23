@@ -23,7 +23,7 @@ void sighandler(int){runloop = false;}
 #include "redis_keys.h"
 
 
-bool simulation = true;
+bool simulation = false;
 
 
 
@@ -38,7 +38,8 @@ enum State {
 	TEST3,
 	TEST4,
 	TEST5,
-	TEST6
+	TEST6,
+	STOP
 };
 
 int main() {
@@ -68,7 +69,7 @@ int main() {
 	// "1" = test up down, "2" = test orientation speed, "3" = test up down with orientation, 
 	// "4" = test3 plus tracking the ball, "5" = orientation incline, "6" = test3 plus tracking the ball and orientation,
 	// "7" = waiting
-	string controller_status = "7"; 
+	string controller_status = "3"; 
 	float freq = 8.5; // 7.5 was tried and worked
 
 	// start redis client
@@ -199,19 +200,19 @@ int main() {
 
 	// Desired robot states and gains
 	// Set Gains
-	kp_xyz = Vector3d(100.0, 100.0, 100.0);
-	kv_xyz = Vector3d(20.0, 20.0, 20.0);
-	kp_ori_xyz = Vector3d(150.0, 150.0, 150.0);
-	kv_ori_xyz = Vector3d(20.0, 20.0, 20.0);
+	// kp_xyz = Vector3d(100.0, 100.0, 100.0);
+	// kv_xyz = Vector3d(20.0, 20.0, 20.0);
+	// kp_ori_xyz = Vector3d(150.0, 150.0, 150.0);
+	// kv_ori_xyz = Vector3d(20.0, 20.0, 20.0);
 
-	// kp_xyz = Vector3d(50.0, 50.0, 50.0);
-	// kv_xyz = Vector3d(5.0, 5.0, 5.0);
-	// kp_ori_xyz = Vector3d(50.0, 50.0, 50.0);
-	// kv_ori_xyz = Vector3d(5.0, 5.0, 5.0);
+	kp_xyz = Vector3d(50.0, 50.0, 50.0);
+	kv_xyz = Vector3d(5.0, 5.0, 5.0);
+	kp_ori_xyz = Vector3d(50.0, 50.0, 50.0);
+	kv_ori_xyz = Vector3d(5.0, 5.0, 5.0);
 
 	pose_task->setPosControlGains(kp_xyz, kv_xyz);
 	pose_task->setOriControlGains(kp_ori_xyz, kv_ori_xyz);
-	joint_task->setGains(50, 14, 0);
+	joint_task->setGains(25, 7, 0);
 
 	// Set Goals
 	ee_pos_desired = ee_pos_init;
@@ -279,21 +280,28 @@ int main() {
 		ee_moments = pose_task->getSensedMomentControlWorldFrame();
 
 		// Checking if ball is valid: in range and not anomalies
-		if (ball_position(0) > 0.1 && ball_position(0) < 1.0 && ball_position(1) > -0.8 && ball_position(1) < 0.8) {
+		// if (ball_position(0) > 0.1 && ball_position(0) < 1.0 && ball_position(1) > -0.8 && ball_position(1) < 0.8) {
+		if (ball_position(0) > 0.1 && ball_position(0) < 1.2) {
 			ball_valid = true;
 		} else {
 			ball_valid = false;
-			state = POSTURE;
+			state = STOP;
 		}
 
-		if (ee_pos(0) > 0.3 && ee_pos(0) < 0.8 && ee_pos(1) > -0.6 && ee_pos(1) < 0.6 && ee_pos(2) > 0.05 && ee_pos(2) < 0.6 ) {
+		if (ee_pos(0) > 0.35 && ee_pos(0) < 0.7 && ee_pos(1) > -0.6 && ee_pos(1) < 0.6 && ee_pos(2) > 0.20 && ee_pos(2) < 0.8 ) {
 			ee_valid = true;
 		} else {
 			ee_valid = false;
-			state = POSTURE;
+			cout << "STOPPED" << ee_pos.transpose() << endl;
+			state = STOP;
 		}
 
-
+		if (state == STOP){
+			// update task model 
+			N_prec.setIdentity();
+			joint_task->updateTaskModel(N_prec);
+			command_torques = joint_task->computeTorques();
+		}
 
 
 		if (state == POSTURE) {
@@ -301,8 +309,9 @@ int main() {
 			N_prec.setIdentity();
 			joint_task->updateTaskModel(N_prec);
 			command_torques = joint_task->computeTorques();
+			cout << (robot->q() - q_desired).norm() << endl;
 
-			if ((robot->q() - q_desired).norm() < 15e-2) {
+			if ((robot->q() - q_desired).norm() < 25e-2) {
 				cout << "Posture To Motion" << endl;
 				pose_task->reInitializeTask();
 				joint_task->reInitializeTask();
@@ -324,7 +333,15 @@ int main() {
 					state = TEST3;
 				} else if (controller_status == "4") {
 					cout << "TEST4: Test3 + following ball" << endl;
-					state = TEST4;
+					if (ball_valid && ee_valid){
+						cout << "TEST4: Following ball in waiting" << endl;
+						cout << ball_position.transpose() << endl;
+						state = TEST4;
+					} else if (!ee_valid){
+						cout << "BAD EE: " << ee_pos.transpose() << endl;
+					} else if (!ball_valid){
+						cout << "BAD BALL: " << ball_position.transpose() << endl;
+					}
 				} else if (controller_status == "5") {
 					cout << "TEST5: orientation following" << endl;
 					state = TEST5;
@@ -350,19 +367,21 @@ int main() {
 			// update task model 
 			ee_pos_desired = ee_pos_init;
 			ee_pos_desired(0) = ball_position(0) - 0.20;
-			ee_pos_desired(1) = ball_position(1) ;
+			// ee_pos_desired(1) = ball_position(1) ;
 			pose_task->setGoalPosition(ee_pos_desired);
 
 			// orientation goals
 			ee_ori_desired = ee_ori_init;
-			float theta = 0.0*M_PI/180.0;
+			float theta = 20.0*M_PI/180.0;
 			ee_ori_desired = AngleAxisd(theta, ee_ori_init.col(1)).toRotationMatrix() * ee_ori_init;
 			// q1 is angle to make up for x error, rotates about ee y
 			float q1 = atan( (ball_position(0)- ee_pos_init(0))/ (ee_pos_init(2))) / 2.0;
 			ee_ori_desired = AngleAxisd(q1, -ee_ori_init.col(1)).toRotationMatrix() * ee_ori_desired;   // Check if ee_ori_init.col(0) is correct
-			// q2 is angle to make up for y error, rotates about ee x
-			float q2 = atan( (ball_position(1)- ee_pos_init(1))/ (ee_pos_init(2))) / 2.0;
-			ee_ori_desired = AngleAxisd(q2, -ee_ori_init.col(0)).toRotationMatrix() * ee_ori_desired;  // Check if -ee_ori_init.col(1) is correct
+			
+			// // q2 is angle to make up for y error, rotates about ee x
+			// float q2 = atan( (ball_position(1)- ee_pos_init(1))/ (ee_pos_init(2))) / 2.0;
+			// ee_ori_desired = AngleAxisd(q2, -ee_ori_init.col(0)).toRotationMatrix() * ee_ori_desired;  // Check if -ee_ori_init.col(1) is correct
+
 			pose_task->setGoalOrientation(ee_ori_desired);
 
 			// ee_vel_desired(0) = ball_velocity(0);
@@ -385,17 +404,23 @@ int main() {
 		} else if (state == MOTION_UP) {
 			// position goals 
 			ee_pos_desired(0) = ball_position(0) - 0.20;
-			ee_pos_desired(1) = ball_position(1);
+			// ee_pos_desired(1) = ball_position(1);
 			ee_pos_desired(2) = min(ball_apex + 0.2, ee_pos_init(2) + 0.05);
+			if (ball_apex<ee_pos_init(2)-0.05){
+				ee_pos_desired(2) = ee_pos_init(2);
+			}
+			// ee_pos_desired(2) = max(ee_pos_init(2) - 0.25, ball_apex + 0.2);
 			pose_task->setGoalPosition(ee_pos_desired);
 
 			// orientation goals
 			// q1 is angle to make up for x error, rotates about ee y
 			float q1 = atan( (ball_position(0)- ee_pos_init(0))/ (ee_pos_init(2))) / 2.0;
 			ee_ori_desired = AngleAxisd(q1, -ee_ori_init.col(1)).toRotationMatrix() * ee_ori_desired;   // Check if ee_ori_init.col(0) is correct
-			// q2 is angle to make up for y error, rotates about ee x
-			float q2 = atan( (ball_position(1)- ee_pos_init(1))/ (ee_pos_init(2))) / 2.0;
-			ee_ori_desired = AngleAxisd(q2, -ee_ori_init.col(0)).toRotationMatrix() * ee_ori_desired;  // Check if -ee_ori_init.col(1) is correct
+			
+			// // q2 is angle to make up for y error, rotates about ee x
+			// float q2 = atan( (ball_position(1)- ee_pos_init(1))/ (ee_pos_init(2))) / 2.0;
+			// ee_ori_desired = AngleAxisd(q2, -ee_ori_init.col(0)).toRotationMatrix() * ee_ori_desired;  // Check if -ee_ori_init.col(1) is correct
+			
 			pose_task->setGoalOrientation(ee_ori_desired);
 
 			// update task model
@@ -415,8 +440,8 @@ int main() {
 
 				ee_pos_desired = ee_pos_init;
 				ee_pos_desired(0) = 0.5* (ee_pos(0) + ee_pos_init(0));
-				ee_pos_desired(1) = 0.5* (ee_pos(1) + ee_pos_init(1));
-				ee_pos_desired(2) = -0.2;
+				// ee_pos_desired(1) = 0.5* (ee_pos(1) + ee_pos_init(1));
+				ee_pos_desired(2) = ee_pos_init(2) - 0.05;
 				pose_task->setGoalPosition(ee_pos_desired);
 			
 				joint_task->setGoalPosition(q_desired);
@@ -433,7 +458,7 @@ int main() {
 
 			command_torques = pose_task->computeTorques() + joint_task->computeTorques();
 
-			if ((ball_position - ee_pos).norm() > 0.3 || ee_pos(2) < ee_pos_init(2)-0.05 ) {
+			if (abs(ball_position(2) - ee_pos(2)) > 0.30 || ee_pos(2) < ee_pos_init(2)-0.05 ) {
 				cout << "MOTION DOWN TO WAITING" << endl;
 				dribble_count += 1.0;
 
@@ -491,10 +516,9 @@ int main() {
             command_torques = pose_task->computeTorques() + joint_task->computeTorques();
         } else if (state == TEST4) {
 			ee_pos_desired = ee_pos_init;
-			ee_pos_desired(0) = ball_position(0) + 0.12;
-			ee_pos_desired(1) = ball_position(1) ;
-			ee_pos_desired(2) = ball_position(2) + 0.30;
-			cout << ee_pos_desired(2) << ball_position(2) << endl;
+			ee_pos_desired(0) = ball_position(0) - 0.18;
+			// ee_pos_desired(1) = ball_position(1) ;
+			ee_pos_desired(2) = ball_position(2) + 0.35;
             // ee_pos_desired(2) = ee_pos_init(2) + 0.02 * sin(freq*(time - time_start));
 
 			// ee_vel_desired(0) = ball_velocity(0);

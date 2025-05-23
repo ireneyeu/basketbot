@@ -7,12 +7,12 @@ name: basketbot-env
 channels:
   - defaults
   - conda-forge
-  - robostack  # for pyrealsense2 if available
+  - robostack
 dependencies:
   - python=3.10
   - numpy=1.21.5
-  - pip
+  - opencv-contrib-python==4.7.0.72
+  - pyrealsense2=2.54.2.5684  # Install via conda
   - pip:
-      - opencv-contrib-python==4.7.0.72
-      - pyrealsense2==2.54.1.5684
-      - ultralytics==8.0.20
+      - ultralytics==8.3.9
+
