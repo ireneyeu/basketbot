@@ -113,6 +113,26 @@ class EndEffector {
 		float contact;
 	};
 
+// Setup KEYS
+void setupSaiKeys(bool simulation) {
+	if (simulation) {
+		cout << "SIMULATION TRUE" << endl;
+		JOINT_ANGLES_KEY = "sai::sim::PANDA::sensors::q";
+		JOINT_VELOCITIES_KEY = "sai::sim::PANDA::sensors::dq";
+		JOINT_TORQUES_COMMANDED_KEY = "sai::sim::PANDA::actuators::fgc";
+		BALL_POSITION_KEY = "sai::sim::BALL::sensors::position";
+		BALL_VELOCITY_KEY = "sai::sim::BALL::sensors::velocity";
+	} else {
+		cout << "SIMULATION FALSE" << endl;
+		JOINT_TORQUES_COMMANDED_KEY = "sai::commands::FrankaRobot::control_torques";
+		JOINT_VELOCITIES_KEY = "sai::sensors::FrankaRobot::joint_velocities";
+		JOINT_ANGLES_KEY = "sai::sensors::FrankaRobot::joint_positions";
+		BALL_POSITION_KEY = "sai::camera::BALL::sensors::position";
+		BALL_VELOCITY_KEY = "sai::camera::BALL::sensors::velocity";
+		MASS_MATRIX_KEY = "sai::sensors::FrankaRobot::model::mass_matrix";
+	}
+}
+
 // Setup Gains
 void setupGains(
 	std::shared_ptr<SaiPrimitives::MotionForceTask>& pose_task,
@@ -196,26 +216,10 @@ int main() {
 	Ball ball;
 	EndEffector ee(Matrix3d::Identity());
 
-	if (simulation){
-		cout << "SIMULATION TRUE" << endl;
-		JOINT_ANGLES_KEY = "sai::sim::PANDA::sensors::q";
-		JOINT_VELOCITIES_KEY = "sai::sim::PANDA::sensors::dq";
-		JOINT_TORQUES_COMMANDED_KEY = "sai::sim::PANDA::actuators::fgc";
-		BALL_POSITION_KEY = "sai::sim::BALL::sensors::position";
-		BALL_VELOCITY_KEY = "sai::sim::BALL::sensors::velocity";
-	} else{
-		cout << "SIMULATION FALSE" << endl;
-		JOINT_TORQUES_COMMANDED_KEY = "sai::commands::FrankaRobot::control_torques";
-		JOINT_VELOCITIES_KEY = "sai::sensors::FrankaRobot::joint_velocities";
-		JOINT_ANGLES_KEY = "sai::sensors::FrankaRobot::joint_positions";
-		BALL_POSITION_KEY = "sai::camera::BALL::sensors::position";
-		BALL_VELOCITY_KEY = "sai::camera::BALL::sensors::velocity";
-		MASS_MATRIX_KEY = "sai::sensors::FrankaRobot::model::mass_matrix";
-	}
+	setupSaiKeys(simulation);
 
 	// Location of URDF files specifying world and robot information
 	static const string robot_file = string(BASKETBOT_URDF_FOLDER) + "/panda/panda_arm_box.urdf";
-
 
 	// start redis client
 	auto redis_client = SaiCommon::RedisClient();
@@ -405,10 +409,8 @@ int main() {
 		} else if (state == MOTION_UP) {
 			// position goals 
 			ee.trackXY(ball.position, -0.20, tracking_y); // (ball.position(x,y,z), offset_x, bool tracking_y)
-			ee.pos_desired(2) = min(ball.apex + 0.20, ee.pos_init(2) + 0.15);
-			if (ball.apex + 0.20 < ee.pos_init(2)-0.15){
-				ee.pos_desired(2) = ee.pos_init(2)-0.15;
-			}
+			ee.pos_desired(2) = clamp(ball.apex + 0.20, ee.pos_init(2) - 0.15, ee.pos_init(2) + 0.15); //(value, min, max)
+
 			pose_task->setGoalPosition(ee.pos_desired);
 
 			// orientation goals
