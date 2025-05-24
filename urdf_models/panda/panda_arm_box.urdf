@@ -144,16 +144,18 @@
 			<inertia ixx="0.01" iyy="0.01" izz="0.01" ixy="0" ixz="0" iyz="0" />
 		</inertial>
 		<visual>
+			<origin xyz="0.1 0 0" rpy="0 0 0" />
 			<geometry>
-				<box size="0.50 0.20 0.02" /> <!-- END EFFECTOR SHAPE -->
+				<box size="0.40 0.20 0.02" /> <!-- END EFFECTOR SHAPE -->
 			</geometry>
 			<material name="material_grey">
 				<color rgba="0.75 0.75 0.75 1.0" />
 			</material>
 		</visual>
 		<collision>
+			<origin xyz="0.1 0 0" rpy="0 0 0" />
 			<geometry>
-				<box size="0.50 0.20 0.02" /> <!-- END EFFECTOR SHAPE -->
+				<box size="0.40 0.20 0.02" /> <!-- END EFFECTOR SHAPE -->
 			</geometry>
 		</collision>
 	</link>
