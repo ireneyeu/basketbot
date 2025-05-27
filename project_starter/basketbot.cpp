@@ -33,7 +33,7 @@ enum State {
 // Ball Class
 class Ball {
 public:
-	Ball() : position(Vector3d::Zero()), velocity(Vector3d::Zero()), apex(0.0) {}
+	Ball() : position(Vector3d::Zero()), velocity(Vector3d::Zero()), apex(0.0), contact(0.0f) {}
 
 	void update(SaiCommon::RedisClient &redis) {
 		position = redis.getEigen(BALL_POSITION_KEY);
@@ -53,7 +53,7 @@ public:
 
 	Vector3d position;
 	Vector3d velocity;
-	float apex;
+	float apex;	float contact;
 };
 
 // EE Class
@@ -77,7 +77,7 @@ class EndEffector {
 		}
 	
 		// Takes ball position and follows x + offset, y? and z initial
-		void trackXY(const Vector3d& ball_pos, float offset_x = -0.12, bool tracking_y = false) {
+		void trackXY(const Vector3d& ball_pos, float offset_x, bool tracking_y = false) {
 			pos_desired = pos_init;
 			pos_desired(0) = ball_pos(0) + offset_x;
 			if (tracking_y)
@@ -195,19 +195,21 @@ Eigen::VectorXd updateCommandTorques(
 
 
 int main() {
-	bool simulation = false;
+	bool simulation = true;
 	bool tracking_y = false; //  for both position and angle tracking
 	bool tracking_x_angle = false; 
 	bool up_test = true;
-	float x_ball_offset = -0.12;
-	double z_ball_offset = 0.20;
+	float x_ball_offset = -0.45;
+	double z_ball_offset = 0.15;
 	float wrist_up_deg = 7.0;
 	float wrist_down_deg = -15.0;
+	float step_size = 0.0005;
+	float step = 0.0005;
 
 	// "1" = test up down, "2" = test orientation speed, "3" = test up down with orientation, 
 	// "4" = test3 plus tracking the ball, "5" = orientation incline, "6" = test3 plus tracking the ball and orientation,
 	// "7" = waiting
-	string controller_status = "1";
+	string controller_status = "2";
 	float freq = 8.5; // 8.5 was tried and worked
 
 	// // Define Information
@@ -311,6 +313,7 @@ int main() {
 		ee.update(robot, control_link, control_point);
 
 
+		// COMMENT OUT BALL FOR SIM
 		// if (!ball.isValid()) {
 		// 	cout << "STOPPED BALL: " << ball.position.transpose() << endl;
 		// 	state = STOP;
@@ -341,6 +344,7 @@ int main() {
 
 				ee.setInitial();
 				ee.contact = ee.pos(2);
+				ball.contact = ee.pos(2) - z_ball_offset;
 				cout << ee.ori << endl;
 
 				pose_task->setGoalPosition(ee.pos);
@@ -389,7 +393,7 @@ int main() {
 		if (state == WAITING) {
 			// update task model 
 			ee.trackXY(ball.position, x_ball_offset, tracking_y); // (ball.position(x,y,z), offset_x, bool tracking_y)
-			ee.pos_desired(2) = ee.contact;
+			ee.pos_desired(2) = ball.contact + z_ball_offset;
 			pose_task->setGoalPosition(ee.pos_desired);
 
 			// orientation goals
@@ -425,11 +429,17 @@ int main() {
 			if (ball.velocity(2) < .1) {
 				cout << "MOTION UP TO MOTION DOWN" << endl;
 
-				ee.contact = ball.position(2) + z_ball_offset;
+				ee.contact = ee.pos(2);
+				ball.contact = ball.position(2);
+
+				// vector3d ee_pos_down_final;
+				// ee_pos_down_final << 0.5* (ee.pos(0) + ee.pos_init(0)),
+				// 					 0.5* (ee.pos(0) + ee.pos_init(0)),
+				// 					-0.2;
 
 				ee.pos_desired(0) = 0.5* (ee.pos(0) + ee.pos_init(0));
 				ee.pos_desired(1) = 0.5* (ee.pos(1) + ee.pos_init(1));
-				ee.pos_desired(2) = ee.contact-0.1;
+				ee.pos_desired(2) = ee.pos(2)-0.05;
 				pose_task->setGoalPosition(ee.pos_desired);
 
 				ee.wristGoal(wrist_down_deg);
@@ -441,6 +451,10 @@ int main() {
 				
 		} else if (state == MOTION_DOWN) {
 			// update task model
+
+			// vector3d direction = 
+			// double distance = 
+
 			command_torques = updateCommandTorques(*pose_task, *joint_task, N_prec);
 
 			if (abs(ball.position(2) - ee.pos(2)) > 0.30 || ee.pos(2) < ee.contact-0.03 ) {
@@ -475,10 +489,38 @@ int main() {
 			command_torques = updateCommandTorques(*pose_task, *joint_task, N_prec);
 
 		} else if (state == TEST2) {
-			float theta = -3*M_PI/180.0 + 20.0*M_PI/180.0 * sin(freq*(time - time_start));
 			ee.pos_desired = ee.pos_init;
+			ee.ori_desired = ee.ori_init;
 
-			ee.ori_desired = AngleAxisd(theta, ee.ori_init.col(1)).toRotationMatrix() * ee.ori_init;
+			
+			Vector3d final_pos_up;
+			final_pos_up << ee.pos_init(0), ee.pos_init(1), ee.pos_init(2) + 0.5;
+			Vector3d direction = final_pos_up - ee.pos;
+			direction.normalize();
+
+			if (up_test){
+				ee.pos_desired = ee.pos_init + step*direction;
+				// ee.wristGoal(wrist_up_deg);
+			} else {
+				ee.pos_desired = ee.pos_init - step*direction;
+				// ee.wristGoal(wrist_down_deg);
+			}
+			float diff_pos = ee.pos(2) - ee.pos_init(2);
+			float diff_ori = (ee.ori - ee.ori_desired).norm();
+
+			step += step_size;
+
+			cout << diff_ori << endl;
+			if (up_test && diff_pos > 0.03){
+				up_test = !up_test;
+				step = step_size;
+				cout << "SWITCHING!!!" << endl;
+			}
+			if (!up_test && diff_pos < 0.03){
+				up_test = !up_test;
+				step = step_size;
+				cout << "SWITCHING!!!" << endl;
+			}
 			pose_task->setGoalPosition(ee.pos_desired);
 			pose_task->setGoalOrientation(ee.ori_desired);
 

@@ -11,6 +11,13 @@ model = YOLO("yolov8n.pt")  # lightweight model for speed
 BALL_POSITION_KEY = "sai::camera::BALL::sensors::position"
 BALL_VELOCITY_KEY = "sai::camera::BALL::sensors::velocity"
 BALL_APEX_KEY = "sai::sim::BALL::sensors::apex"
+BALL_POS_OPTITRACK = "sai2::optitrack::rigid_body_pos::6"
+## 
+# R_cam_to_world = np.array([
+#                                             [0, 0, 1],
+#                                             [1, 0, 0],
+#                                             [0, 1, 0] ])       ## Check in new setup
+# t_cam_to_world = np.array([3.70, 0.46, 0.38])                  ## Check in new setup
 
 redis_client = redis.Redis()
 
@@ -170,6 +177,18 @@ try:
                                             [0, -1, 0] ])     ## Check in new setup
                 t_cam_to_world = np.array([0.5, -2.0, 0.50])    ## Check in new setup
                 p_world = R_cam_to_world @ p_cam + t_cam_to_world
+
+
+                R_OPTI_to_world = np.array([
+                                            [0, 0, 1],
+                                            [1, 0, 0],
+                                            [0, 1, 0] ])       ## Check in new setup
+                t_OPTI_to_world = np.array([3.70, 0.46, 0.38]) ## Check in new setup
+
+                p_opti = redis_client.get(BALL_POS_OPTITRACK).decode("utf-8")
+                print(p_opti)
+                p_world = R_OPTI_to_world @ p_opti + t_OPTI_to_world
+
                 
                 # Compute velocity with exponential smoothing
                 current_time = cv2.getTickCount() / cv2.getTickFrequency()  # in seconds
