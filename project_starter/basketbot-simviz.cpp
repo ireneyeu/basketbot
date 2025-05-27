@@ -104,8 +104,8 @@ int main() {
 	}
 
 	// set ball information
-	ball_position << 0.7, 0.0, 0.3;
-	ball_velocity << 0.0, 0.0, -1.5; // 2.8 from 0.0 to reach softly
+	ball_position << 5.7, 0.0, 0.3;
+	ball_velocity << 0.0, 0.0, -0.0; // 2.8 from 0.0 to reach softly
 	ball_spin << 0.0, 0.0, 0.0;
 	ball_pose = Affine3d::Identity();
 	ball_pose.translation() = ball_position;
@@ -178,7 +178,7 @@ void simulation(std::shared_ptr<SaiSimulation::SaiSimulation> sim) {
 	double sim_freq = 2000; // should be 2000
 	SaiCommon::LoopTimer timer(sim_freq);
 
-	sim->setTimestep(0.2 / sim_freq); // 0.1 is 10 times slower sim, 1.0 is real time
+	sim->setTimestep(1.0 / sim_freq); // 0.1 is 10 times slower sim, 1.0 is real time
 	sim->enableGravityCompensation(true);
 	sim->enableJointLimits(robot_name);
 
