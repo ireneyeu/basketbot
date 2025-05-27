@@ -1,6 +1,7 @@
 
 import numpy as np
 import redis
+import ast
 
 
 BALL_POSITION_KEY = "sai::camera::BALL::sensors::position"
@@ -23,10 +24,15 @@ R_OPTI_to_world = np.array([
 t_OPTI_to_world = np.array([3.70, 0.46, 0.38]) ## Check in new setup
 
 # p_opti = np.array(redis_client.get(BALL_POS_OPTITRACK).decode("utf-8"), dtype="float32")
-p_opti = np.array(redis_client.get(BALL_POS_OPTITRACK))
+p_opti_str = redis_client.get(BALL_POS_OPTITRACK).decode('utf-8')
+float_list = ast.literal_eval(p_opti_str)
+p_opti = np.array(float_list, dtype=float)
+
+
 print(R_OPTI_to_world)
 print(p_opti)
 p_world = R_OPTI_to_world @ p_opti + t_OPTI_to_world
+print(p_world)
 
 
 
