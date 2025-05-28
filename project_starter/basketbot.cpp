@@ -199,16 +199,19 @@ Eigen::VectorXd updateCommandTorques(
 
 
 int main() {
-	bool simulation = true;
-	bool tracking_y = false; //  for both position and angle tracking
-	bool tracking_x_angle = true; 
-	bool up_test = true;
-	float x_ball_offset = -0.15;
-	double z_ball_offset = 0.15;
-	float wrist_up_deg = 7.0;
-	float wrist_down_deg = -15.0;
-	float step_size = 0.002;
-	float step = 0.002;
+	bool simulation = true;         // true for simulation, false for real robot
+	bool tracking_y = false;        // for position and angle tracking
+	bool tracking_x_angle = false;  // for angle tracking in x direction
+	bool up_test = true;            // for tests 1 and 2 hardcoded
+	float x_ball_offset = -0.15;    // offset in x for desired ee point
+	double z_ball_offset = 0.15;    // offset in z for desired ee point
+	float wrist_up_deg = 7.0;       // wrist up goal angle in degrees
+	float wrist_down_deg = -15.0;   // wrist down goal angle in degrees
+	float step_size = 0.002;        // step size for "velocity" control
+	float step = 0.002;             // initial step
+	float ball_vel_up = 0.1;        // velocity threshold considering the ball going up
+	float min_ball_apex = 0.2;      // min ball apex height to consider dribbling
+	float clamp_z = 0.10;           // min and max z position for ee during motion up
 
 	// "1" = hard coded, "2" = hard coded with speed, "3" = test up down with orientation, 
 	// "4" = tracking XZ, "5" = orientation incline, "6" = test3 plus tracking the ball and orientation,
@@ -409,7 +412,7 @@ int main() {
 			command_torques = updateCommandTorques(*pose_task, *joint_task, N_prec);
 
 			cout << ball.isValid() << " " << ball.velocity(2) << " " << ball.apex << endl;
-			if (ball.isValid() && ball.velocity(2) > 0.1 && ball.apex > 0.2) {
+			if (ball.isValid() && ball.velocity(2) > ball_vel_up && ball.apex > min_ball_apex) {
 				cout << "Ball Going up" << endl;
 				cout << "WAITING TO MOVING UP" << endl;
 
@@ -419,7 +422,7 @@ int main() {
 		} else if (state == MOTION_UP) {
 			// position goals 
 			ee.trackXY(ball.position, x_ball_offset, tracking_y); // (ball.position(x,y,z), offset_x, bool tracking_y)
-			ee.pos_desired(2) = clamp(ball.apex + z_ball_offset, ee.pos_init(2) - 0.10, ee.pos_init(2) + 0.10); //(value, min, max)
+			ee.pos_desired(2) = clamp(ball.apex + z_ball_offset, ee.pos_init(2) - clamp_z, ee.pos_init(2) + clamp_z); //(value, min, max)
 
 			pose_task->setGoalPosition(ee.pos_desired);
 
