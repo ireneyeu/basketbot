@@ -104,7 +104,7 @@ int main() {
 	}
 
 	// set ball information
-	ball_position << 0.7, 0.0, 0.3;
+	ball_position << 0.7, 0.0, 0.2;
 	ball_velocity << 0.0, 0.0, -0.0; // 2.8 from 0.0 to reach softly
 	ball_spin << 0.0, 0.0, 0.0;
 	ball_pose = Affine3d::Identity();

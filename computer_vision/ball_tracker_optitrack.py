@@ -16,7 +16,7 @@ R_OPTI_to_world = np.array([
     [0, 1, 0]
 ])  # Check in new setup
 
-t_OPTI_to_world = np.array([3.70, 0.46, 0.38])  # Check in new setup
+t_OPTI_to_world = np.array([3.45, 0.20, -0.35])  # Check in new setup
 
 # Initialize previous state
 prev_position_world = None
@@ -42,7 +42,7 @@ while True:
     current_time = time.time()
 
     # Send position to Redis
-    print(f"Position: {p_world}")
+    # print(f"Position: {p_world}")
     redis_client.set(BALL_POSITION_KEY, ','.join(map(str, p_world)))
 
     if prev_position_world is not None and prev_time is not None:
@@ -71,4 +71,4 @@ while True:
 
     prev_position_world = p_world
     prev_time = current_time
-    time.sleep(0.001)
+    time.sleep(0.005)

@@ -108,9 +108,9 @@ class EndEffector {
 		}
 
 		bool isValid() const {
-			return pos(0) >  0.35 && pos(0) < 0.7 
+			return pos(0) >  0.4 && pos(0) < 0.75
 				&& pos(1) > -0.6  && pos(1) < 0.6 
-				&& pos(2) >  0.2  && pos(2) < 0.8;
+				&& pos(2) >  0.2  && pos(2) < 0.7;
 		}
 	
 		Vector3d pos, pos_init, pos_desired, vel, vel_desired, contact, final_down_goal, down_direction;
@@ -157,7 +157,7 @@ void setupGains(
 	Vector3d kp_xyz(100.0, 100.0, 100.0);
 	Vector3d kv_xyz(10.0, 10.0, 10.0);
 	// Orientation gains
-	Vector3d kp_ori_xyz(250.0, 250.0, 250.0);
+	Vector3d kp_ori_xyz(150.0, 150.0, 150.0);
 	Vector3d kv_ori_xyz( 25.0,  25.0,  25.0);
 
 	pose_task->setPosControlGains(kp_xyz, kv_xyz);
@@ -199,19 +199,19 @@ Eigen::VectorXd updateCommandTorques(
 
 
 int main() {
-	bool simulation = true;         // true for simulation, false for real robot
+	bool simulation = false;         // true for simulation, false for real robot
 	bool tracking_y = false;        // for position and angle tracking
 	bool tracking_x_angle = false;  // for angle tracking in x direction
 	bool up_test = true;            // for tests 1 and 2 hardcoded
-	float x_ball_offset = -0.15;    // offset in x for desired ee point
-	double z_ball_offset = 0.15;    // offset in z for desired ee point
-	float wrist_up_deg = 7.0;       // wrist up goal angle in degrees
-	float wrist_down_deg = -15.0;   // wrist down goal angle in degrees
-	float step_size = 0.002;        // step size for "velocity" control
-	float step = 0.002;             // initial step
+	float x_ball_offset = -0.18;    // offset in x for desired ee point
+	double z_ball_offset = 0.14;    // offset in z for desired ee point
+	float wrist_up_deg = 10.0;       // wrist up goal angle in degrees
+	float wrist_down_deg = -20.0;   // wrist down goal angle in degrees
+	float step_size = 0.0005;        // step size for "velocity" control
+	float step = 0.0005;             // initial step
 	float ball_vel_up = 0.1;        // velocity threshold considering the ball going up
 	float min_ball_apex = 0.2;      // min ball apex height to consider dribbling
-	float clamp_z = 0.10;           // min and max z position for ee during motion up
+	float clamp_z = 0.15;           // min and max z position for ee during motion up
 
 	// "1" = hard coded, "2" = hard coded with speed, "3" = test up down with orientation, 
 	// "4" = tracking XZ, "5" = orientation incline, "6" = test3 plus tracking the ball and orientation,
@@ -221,7 +221,7 @@ int main() {
 
 	// // Define Information
 	VectorXd q_desired(7);
-	q_desired << 0.0, 0.133292, 0.0, -2.10622, 0.0, 2.355, -0.9; // sai::sensors::FrankaRobot::joint_positions
+	q_desired << 0.0, -0.1, 0.0, -2.0, 0.0, 1.9, -0.75; // sai::sensors::FrankaRobot::joint_positions
 
 	// initial state 
 	int state = POSTURE;
@@ -320,13 +320,13 @@ int main() {
 		ball.update(redis_client);
 		ee.update(robot, control_link, control_point);
 
-		if (controller_status == "7") {
+		if (controller_status == "7" && state != STOP) {
 			if (!ball.isValid()) {
 				cout << "STOPPED BALL: " << ball.position.transpose() << endl;
 				state = STOP;
 			}
 		}
-		if (!ee.isValid()) {
+		if (!ee.isValid() && state != STOP) {
 			cout << "STOPPED EE: " << ee.pos.transpose() << endl;
 			state = STOP;
 		}
@@ -399,7 +399,9 @@ int main() {
 
 		if (state == WAITING) {
 			// update task model 
-			ee.trackXY(ball.position, x_ball_offset, tracking_y); // (ball.position(x,y,z), offset_x, bool tracking_y)
+			ee.pos_desired = ee.pos_init;
+			// ee.pos_desired(0) = ee.pos_init(0) + 0.05;
+			// ee.trackXY(ball.position, x_ball_offset, tracking_y); // (ball.position(x,y,z), offset_x, bool tracking_y)
 			ee.pos_desired(2) = ball.contact + z_ball_offset;
 			pose_task->setGoalPosition(ee.pos_desired);
 
@@ -411,7 +413,6 @@ int main() {
 			// update task model
 			command_torques = updateCommandTorques(*pose_task, *joint_task, N_prec);
 
-			cout << ball.isValid() << " " << ball.velocity(2) << " " << ball.apex << endl;
 			if (ball.isValid() && ball.velocity(2) > ball_vel_up && ball.apex > min_ball_apex) {
 				cout << "Ball Going up" << endl;
 				cout << "WAITING TO MOVING UP" << endl;
@@ -421,29 +422,35 @@ int main() {
 			}
 		} else if (state == MOTION_UP) {
 			// position goals 
-			ee.trackXY(ball.position, x_ball_offset, tracking_y); // (ball.position(x,y,z), offset_x, bool tracking_y)
+			ee.pos_desired = ee.pos_init;
+			// ee.pos_desired(0) = ee.pos_init(0)+0.05;
+			// ee.trackXY(ball.position, x_ball_offset, tracking_y); // (ball.position(x,y,z), offset_x, bool tracking_y)
 			ee.pos_desired(2) = clamp(ball.apex + z_ball_offset, ee.pos_init(2) - clamp_z, ee.pos_init(2) + clamp_z); //(value, min, max)
 
 			pose_task->setGoalPosition(ee.pos_desired);
 
 			// orientation goals           
 			ee.wristGoal(wrist_up_deg);
-			ee.trackBallWithAngles(ball.position, true, tracking_y); // Updates ee.ori_desired considering ball position x error w/ q1 and y error w/q2
+			ee.trackBallWithAngles(ball.position, tracking_x_angle, tracking_y); // Updates ee.ori_desired considering ball position x error w/ q1 and y error w/q2
 			pose_task->setGoalOrientation(ee.ori_desired);
 
 			// update task model
 			command_torques = updateCommandTorques(*pose_task, *joint_task, N_prec);
 
-			if (ball.velocity(2) < 0.1 || ball.position(2) + z_ball_offset + 0.005 > ee.pos(2)) {
+			if (ball.velocity(2) < 0.1 || ball.position(2) + z_ball_offset + 0.02 > ee.pos(2)) {
 				cout << "MOTION UP TO MOTION DOWN" << endl;
 
 				ee.contact = ee.pos;
 				ball.contact = ball.position(2);
 
+				// velocity control
 				ee.final_down_goal = (0.5 * (ee.pos + ee.pos_init)).eval();
+				ee.final_down_goal(0) = ee.pos(0);
+				ee.final_down_goal(1) = ee.pos(1);	
 				ee.final_down_goal(2) = -0.3;
 				ee.down_direction = ee.final_down_goal - ee.pos;
 				ee.down_direction.normalize();
+
 
 				// ee.pos_desired(0) = 0.5* (ee.pos(0) + ee.pos_init(0));
 				// ee.pos_desired(1) = 0.5* (ee.pos(1) + ee.pos_init(1));
@@ -460,14 +467,16 @@ int main() {
 		} else if (state == MOTION_DOWN) {
 			// update task model
 
+			// velocity control
 			ee.pos_desired = ee.contact + step*ee.down_direction;
+			step += step_size;
+
 			pose_task->setGoalPosition(ee.pos_desired);
 
-			step += step_size;
 			
 			command_torques = updateCommandTorques(*pose_task, *joint_task, N_prec);
 
-			if (abs(ball.position(2) - ee.pos(2)) > 0.30 || ee.pos(2) < ee.contact(2)-0.03) {
+			if (abs(ball.position(2) - ee.pos(2)) > 0.21 || ee.pos(2) < ee.contact(2)-0.03) {
 				cout << "MOTION DOWN TO WAITING" << endl;
 				dribble_count += 1.0;
 
@@ -509,16 +518,16 @@ int main() {
 			direction.normalize();
 
 			if (up_test){
-				ee.pos_desired = ee.pos_init + step*direction;
+				ee.pos_desired = ee.pos + step*direction;
 				ee.wristGoal(wrist_up_deg);
 			} else {
-				ee.pos_desired = ee.pos_init - step*direction;
+				ee.pos_desired = ee.pos - step*direction;
 				ee.wristGoal(wrist_down_deg);
 			}
 			float diff_pos = ee.pos(2) - ee.pos_init(2);
 			float diff_ori = (ee.ori - ee.ori_desired).norm();
 
-			step += step_size;
+			// step += step_size;
 
 			// cout << diff_ori << endl;
 			if (up_test && diff_pos > 0.03){
@@ -556,6 +565,7 @@ int main() {
 			command_torques = updateCommandTorques(*pose_task, *joint_task, N_prec);
 
 		} else if (state == TEST4) {
+			ee.pos_desired = ee.pos_init;
 			ee.trackXY(ball.position, x_ball_offset, tracking_y);
 			ee.pos_desired(2) = ball.position(2) + z_ball_offset;
 
