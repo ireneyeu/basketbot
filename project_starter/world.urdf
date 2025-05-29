@@ -7,7 +7,7 @@
 	</robot>
 
 	<static_object name="Floor">
-		<origin xyz="0.0 0.0 -0.65" rpy="0 0 0" />
+		<origin xyz="0.0 0.0 -0.7" rpy="0 0 0" />
 		<visual>
 			<origin xyz="0.0 0.0 0.0" rpy="0 0 0" />
 			<geometry>
@@ -58,7 +58,7 @@
 		<collision>
 			<origin xyz="0 0 0" rpy="0 0 0" />
 			<geometry>
-				<sphere radius="0.15" />
+				<sphere radius="0.20" />
 			</geometry>
 		</collision>
 		<inertial>
