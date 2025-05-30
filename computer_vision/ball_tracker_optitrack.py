@@ -16,7 +16,7 @@ R_OPTI_to_world = np.array([
     [0, 1, 0]
 ])  # Check in new setup
 
-t_OPTI_to_world = np.array([3.45, 0.20, -0.35])  # Check in new setup
+t_OPTI_to_world = np.array([3.45, 0.27, -0.35])  # Check in new setup
 
 # Initialize previous state
 prev_position_world = None
@@ -64,7 +64,7 @@ while True:
             if vz > 0:
                 z_apex = z_current + (vz ** 2) / (2 * g)
             else:
-                z_apex = 0.0
+                z_apex = -0.20
 
             redis_client.set(BALL_APEX_KEY, str(z_apex))
             print(f"X: {p_world[0]:.2f}, Y: {p_world[1]:.2f}, Z: {p_world[2]:.2f}, Apex Z prediction: {z_apex:.2f} m")
