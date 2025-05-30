@@ -225,15 +225,17 @@ int main() {
 	double z_ball_offset  = 0.15;      // offset in z for desired ee point
 	float wrist_up_deg    = 7.0;      // wrist up goal angle in degrees
 	float wrist_down_deg  = -15.0;     // wrist down goal angle in degrees
-	float step_size       = 0.0015;    // step size for "velocity" control
-	float step            = 0.0015;    // initial step
+	float step_size       = 0.004;    // step size for "velocity" control
+	float step            = 0.004;    // initial step
+	// float step_up         = 0.0001;
 	float ball_vel_up     = 0.1;       // velocity threshold considering the ball going up
 	float ball_vel_down   = 0.01;      // velocity threshold considering the ball going down
 	float min_ball_apex   = 0.01;       // min ball apex height to consider dribbling
 	float clamp_z         = 0.05;      // min and max z position for ee during motion up
 	float start_down_dis  = 0.06;      // threshold for down motion
-	float stop_down_dis   = 0.10;      // threshold for stopping down motion
+	float stop_down_dis   = 0.07;      // threshold for stopping down motion
 	float max_down_dis    = 0.03;      // max distance for down motion
+	float prev_contact    = 0.5;
 
 	// "1" = hard coded, "2" = hard coded with speed, "3" = test up down with orientation, 
 	// "4" = tracking XZ, "5" = orientation incline, "6" = test3 plus tracking the ball and orientation,
@@ -352,6 +354,12 @@ int main() {
 			state = STOP;
 		}
 
+
+		if ((robot->dq()).norm() < 0.0001){
+			cout << "ROBOT STATIONARY" << endl;
+			state = STOP;
+		}
+
 		if (state == STOP){
 			// update task model 
 			N_prec.setIdentity();
@@ -374,6 +382,7 @@ int main() {
 				ee.setInitial();
 				ee.contact = ee.pos;
 				ball.contact = ee.pos(2) - z_ball_offset;
+				prev_contact = ball.contact;
 				cout << "EE Initial Orientation: " << ee.ori << endl;
 				cout << "EE Initial Position: " << ee.pos.transpose() << endl;
 
@@ -422,7 +431,14 @@ int main() {
 		if (state == WAITING) {
 			// update task model 
 			ee.trackXY(ball.position, x_ball_offset, tracking_x, tracking_y); // (ball.position(x,y,z), offset_x, bool tracking_x, bool tracking_y)
-			ee.pos_desired(2) = ball.contact + z_ball_offset + 0.03;
+
+			// if (ee.pos(2) < ball.contact + z_ball_offset){
+			// 	ee.pos_desired(2) = ee.pos(2) + step_up;
+			// }
+
+			ee.pos_desired(2) = ball.contact + z_ball_offset;
+			cout << "WAITING COMMAND: " << ee.pos(2) << ", desired: "<< ee.pos_desired(2) << endl;
+
 			pose_task->setGoalPosition(ee.pos_desired);
 
 			// orientation goals
@@ -441,16 +457,16 @@ int main() {
 			if (ball.isValid() && ball.velocity(2) > ball_vel_up && ee.pos(2) - (ball.position(2) + z_ball_offset) > 0.1 && apex_condition) {
 				state = MOTION_UP;
 				cout << "WAITING TO MOVING UP: STATE ["<< state << "]"  << endl;
-				cout << ball.velocity(2) << endl;
 			}
 		} else if (state == MOTION_UP) {
 			// position goals 
 			ee.trackXY(ball.position, x_ball_offset, tracking_x, tracking_y); // (ball.position(x,y,z), offset_x, bool tracking_x, bool tracking_y)
 			if (tracking_apex) {
-				ee.pos_desired(2) = clamp(ball.apex + z_ball_offset, ee.contact(2) - clamp_z, ee.pos_init(2) + clamp_z); //(value, min, max)
+				ee.pos_desired(2) = clamp(ball.apex + z_ball_offset, ee.contact(2) - clamp_z, ee.contact(2) + clamp_z); //(value, min, max)
 			} else {
 				ee.pos_desired(2) = ball.position(2) + z_ball_offset;
 			}
+			cout << "UP COMMAND: " << ee.pos(2) << ", desired: "<< ee.pos_desired(2) << endl;
 
 			pose_task->setGoalPosition(ee.pos_desired);
 
@@ -473,6 +489,11 @@ int main() {
 
 				ee.contact = ee.pos;
 				ball.contact = ball.position(2);
+				if (prev_contact - ball.contact > .01) {
+					ball.contact = prev_contact - .01;
+				}
+				cout << "CONTACT: " << ball.contact << endl;
+				prev_contact = ball.contact;
 
 				// velocity control
 				ee.setDownDirection(tracking_x, tracking_y);
@@ -491,8 +512,11 @@ int main() {
 
 			// velocity control
 			ee.pos_desired = ee.contact + step*ee.down_direction;
-			step += step_size;
 
+			if (step < max_down_dis){
+				step += step_size;
+			}
+			cout << "DOWN COMMAND: " << ee.pos(2) << ", desired: "<< ee.pos_desired(2) << endl;
 
 			pose_task->setGoalPosition(ee.pos_desired);
 

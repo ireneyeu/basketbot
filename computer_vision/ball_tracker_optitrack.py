@@ -16,7 +16,7 @@ R_OPTI_to_world = np.array([
     [0, 1, 0]
 ])  # Check in new setup
 
-t_OPTI_to_world = np.array([3.45, 0.27, -0.35])  # Check in new setup
+t_OPTI_to_world = np.array([3.45, 0.25, -0.35])  # Check in new setup
 
 # Initialize previous state
 prev_position_world = None
