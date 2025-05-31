@@ -98,7 +98,7 @@ class EndEffector {
 		// q1 is angle to make up for x error, rotates about ee y
 		if (track_q1) {
 			float q1 = atan((ball_pos(0) - pos_init(0)) / pos_init(2)) / 2.0;    
-			ori_desired = AngleAxisd(q1, -ori_init.col(1)).toRotationMatrix() * ori_desired;
+			ori_desired = AngleAxisd(q1/2.0, -ori_init.col(1)).toRotationMatrix() * ori_desired;
 		}
 
 		// q2 is angle to make up for y error, rotates about ee x
@@ -216,13 +216,13 @@ Eigen::VectorXd updateCommandTorques(
 int main() {
 	bool simulation       = false;     // true for simulation, false for real robot
 	bool tracking_x       = false;	   // for position and angle tracking in x
-	bool tracking_y       = false;     // for position and angle tracking in y
-	bool tracking_x_angle = false;     // for angle tracking in x
-	bool tracking_y_angle = false;     // for angle tracking in y
+	bool tracking_y       = true;     // for position and angle tracking in y
+	bool tracking_x_angle = true;     // for angle tracking in x
+	bool tracking_y_angle = true;     // for angle tracking in y
 	bool tracking_apex    = true;     // for tracking ball apex
 	bool apex_condition   = true;      // true by default
 	bool up_test          = true;     // for tests 1 and 2 hardcoded
-	float x_ball_offset   = -0.22;     // offset in x for desired ee point
+	float x_ball_offset   = -0.25;     // offset in x for desired ee point
 	double z_ball_offset  = 0.15;      // offset in z for desired ee point
 	float wrist_up_deg    = 10.0;      // wrist up goal angle in degrees
 	float wrist_down_deg  = -20.0;     // wrist down goal angle in degrees
