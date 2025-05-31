@@ -85,7 +85,7 @@ class EndEffector {
 	void trackXY(const Vector3d& ball_pos, float offset_x, bool tracking_x = false, bool tracking_y = false) {
 		pos_desired = pos_init;
 		if (tracking_x)
-			pos_desired(0) = ball_pos(0) + offset_x;
+			pos_desired(0) = clamp(ball_pos(0) + offset_x, 0.4, 0.75);
 		if (tracking_y)
 			pos_desired(1) = ball_pos(1);
 	}
@@ -122,7 +122,7 @@ class EndEffector {
 	}
 
 	bool isValid() const {
-		return pos(0) >  0.4 && pos(0) < 0.75
+		return pos(0) >  0.35 && pos(0) < 0.8
 			&& pos(1) > -0.6  && pos(1) < 0.6 
 			&& pos(2) >  0.25  && pos(2) < 0.7;
 	}
@@ -169,11 +169,11 @@ void setupGains(
 	// Joint-level gains: kp, kv, ki
 	joint_task->setGains(40, 10, 0);
 	// Positional gains
-	Vector3d kp_xyz(100.0, 100.0, 100.0);
-	Vector3d kv_xyz(10.0, 10.0, 10.0);
+	Vector3d kp_xyz(200.0, 200.0, 200.0);
+	Vector3d kv_xyz(40.0, 40.0, 40.0);
 	// Orientation gains
-	Vector3d kp_ori_xyz(150.0, 150.0, 150.0);
-	Vector3d kv_ori_xyz( 25.0,  25.0,  25.0);
+	Vector3d kp_ori_xyz(250.0, 250.0, 250.0);
+	Vector3d kv_ori_xyz( 50.0,  50.0,  50.0);
 
 	pose_task->setPosControlGains(kp_xyz, kv_xyz);
 	pose_task->setOriControlGains(kp_ori_xyz, kv_ori_xyz);    
@@ -222,24 +222,26 @@ int main() {
 	bool tracking_apex    = true;     // for tracking ball apex
 	bool apex_condition   = true;      // true by default
 	bool up_test          = true;     // for tests 1 and 2 hardcoded
-	float x_ball_offset   = -0.18;     // offset in x for desired ee point
+	float x_ball_offset   = -0.22;     // offset in x for desired ee point
 	double z_ball_offset  = 0.15;      // offset in z for desired ee point
 	float wrist_up_deg    = 10.0;      // wrist up goal angle in degrees
 	float wrist_down_deg  = -15.0;     // wrist down goal angle in degrees
-	float step_size       = 0.005;    // step size for "velocity" control
-	float step            = 0.005;    // initial step
+	float step_size       = 0.008;    // step size for "velocity" control
+	float step            = 0.008;    // initial step
 	float step_up_size    = 0.001;
 	float step_up         = 0.001;
 	float ball_vel_up     = 0.1;       // velocity threshold considering the ball going up
 	float ball_vel_down   = 0.01;      // velocity threshold considering the ball going down
 	float min_ball_apex   = 0.01;       // min ball apex height to consider dribbling
 	float clamp_z         = 0.05;      // min and max z position for ee during motion up
-	float start_down_dis  = 0.10;      // threshold for down motion
+	float start_down_dis  = 0.12;      // threshold for down motion
 	float stop_down_dis   = 0.18;      // threshold for stopping down motion
 	float max_down_dis    = 0.04;      // max distance for down motion
 	float prev_contact    = 0.5;
+	float waiting_offset  = start_down_dis*0.8;
 	bool verbose          = false;
 	bool reached_up       = false;
+	bool driver_running   = true;
 	
 	// "1" = hard coded, "2" = hard coded with speed, "3" = test up down with orientation, 
 	// "4" = tracking XZ, "5" = orientation incline, "6" = test3 plus tracking the ball and orientation,
@@ -249,8 +251,9 @@ int main() {
 
 	// // Define Information
 	VectorXd q_desired(7);
-	q_desired << 0.0, -0.1, 0.0, -2.0, 0.0, 1.9, -0.75; // sai::sensors::FrankaRobot::joint_positions
-	// q_desired << 0.0, 0.27, 0.0, -2.0, 0.0, 2.3, -0.76; // sai::sensors::FrankaRobot::joint_positions
+	// q_desired << 0.0, -0.1, 0.0, -2.0, 0.0, 1.9, -0.77; // sai::sensors::FrankaRobot::joint_positions
+	q_desired << 0.0, 0.05, 0.0, -2.0, 0.0, 2.2, -0.77; // sai::sensors::FrankaRobot::joint_positions
+	//q_desired << 0.0, 0.27, 0.0, -2.0, 0.0, 2.3, -0.77; // sai::sensors::FrankaRobot::joint_positions
 	
 	// initial state 
 	int state = POSTURE;
@@ -338,6 +341,10 @@ int main() {
 
 	cout << "Entering controller loop: STATE[" << state << "]" << endl;
 
+	VectorXd controller_check_prev = redis_client.getEigen("sai::sensors::FrankaRobot::model::robot_gravity");
+
+	int iteration = 0;
+
 	while (runloop) {
 		timer.waitForNextLoop();
 		const double time = timer.elapsedSimTime();
@@ -346,6 +353,19 @@ int main() {
 		updateRobotModel(robot, redis_client, simulation, MASS_MATRIX_KEY, JOINT_ANGLES_KEY, JOINT_VELOCITIES_KEY);
 		ball.update(redis_client);
 		ee.update(robot, control_link, control_point);
+
+		if (iteration % 10 == 0) {
+			VectorXd controller_check = redis_client.getEigen("sai::sensors::FrankaRobot::model::robot_gravity");
+			if (controller_check == controller_check_prev && driver_running){
+				cout << "Controller Dead" << endl;
+				driver_running = false;
+				state = STOP;
+			}
+			controller_check_prev = controller_check;
+			iteration = 1;
+		}
+		iteration ++;
+		
 
 		if (controller_status == "7" && state != STOP) {
 			if (!ball.isValid()) {
@@ -381,7 +401,7 @@ int main() {
 
 				ee.setInitial();
 				ee.contact = ee.pos;
-				ball.contact = ee.pos(2) - z_ball_offset - start_down_dis;
+				ball.contact = ee.pos(2) - z_ball_offset - waiting_offset;
 				ee.lowest = ee.contact(2);
 				prev_contact = ball.contact;
 				cout << "EE Initial Orientation: " << ee.ori << endl;
@@ -434,12 +454,13 @@ int main() {
 			ee.trackXY(ball.position, x_ball_offset, tracking_x, tracking_y); // (ball.position(x,y,z), offset_x, bool tracking_x, bool tracking_y)
 
 
-			if (ee.pos(2) < ball.contact + z_ball_offset + start_down_dis && !reached_up){ // 0.27 < 0.267 + 0.15 + 0.20 = 0.61
-				cout << "velcontrol happening" << endl;
+			if (ee.pos(2) < ball.contact + z_ball_offset + waiting_offset && !reached_up){ // 0.27 < 0.267 + 0.15 + 0.20 = 0.61
+				//cout << "velcontrol happening" << endl;
 				ee.pos_desired(2) = ee.lowest + step_up;
 				step_up += step_up_size;
 			} else {
-				ee.pos_desired(2) = ball.contact + z_ball_offset + start_down_dis;
+				ee.pos_desired(2) = ball.contact + z_ball_offset + waiting_offset;
+				//cout << "reached up" << endl;
 				reached_up = true;
 			}
 
@@ -459,7 +480,7 @@ int main() {
 			// update task model
 			command_torques = updateCommandTorques(*pose_task, *joint_task, N_prec);
 
-			if (!verbose){
+			if (verbose){
 				cout << "WAITING COMMAND: " << ee.pos(2) << ", desired: "<< ee.pos_desired(2) << "ball contact: " << ball.contact << endl;
 			}
 
@@ -472,7 +493,7 @@ int main() {
 				state = MOTION_UP;
 				step_up = step_up_size;
 				reached_up = false;
-				cout << "WAITING TO MOVING UP: STATE ["<< state << "]"  << endl;
+				cout << "WAITING TO MOVING UP. POS: " << ee.pos(2) << " Desired: " << ee.pos_desired(2) << endl << endl;
 			}
 		} else if (state == MOTION_UP) {
 			// position goals 
@@ -498,11 +519,12 @@ int main() {
 
 			if (ball.velocity(2) < ball_vel_down || ee.pos(2) - (ball.position(2) + z_ball_offset) < start_down_dis ) {
 				state = MOTION_DOWN;
-				cout << "MOTION UP TO MOTION DOWN: STATE ["<< state << "]" << endl;
 				if (ball.velocity(2) < ball_vel_down) {
-					cout << " Caused by: Negative ball velocity. ball_vel_z < " << ball_vel_down << endl;
+					cout << " MOTION UP TO MOTION DOWN. POS: " << ee.pos(2) << " Desired: " << ee.pos_desired(2)<< endl;
+					cout << " Caused by: Negative ball velocity." << endl << endl;
 				} else {
-					cout << " Caused by: Ball is close enough. ee_z - (ball_z + z_offset) < " << start_down_dis << endl;
+					cout << " MOTION UP TO MOTION DOWN. POS: " << ee.pos(2) << " Desired: " << ee.pos_desired(2) << endl;
+					cout << " Caused by: Ball is close enough. " << endl << endl;
 				}
 
 				ee.contact = ee.pos;
@@ -515,11 +537,6 @@ int main() {
 
 				// velocity control
 				ee.setDownDirection(tracking_x, tracking_y);
-
-				// ee.pos_desired(0) = 0.5* (ee.pos(0) + ee.pos_init(0));
-				// ee.pos_desired(1) = 0.5* (ee.pos(1) + ee.pos_init(1));
-				// ee.pos_desired(2) = ee.pos(2)-0.05;
-				// pose_task->setGoalPosition(ee.pos_desired);
 
 				ee.wristGoal(wrist_down_deg);
 				pose_task->setGoalOrientation(ee.ori_desired);
@@ -544,11 +561,12 @@ int main() {
 
 			if (ee.pos(2) - (ball.position(2) + z_ball_offset) > stop_down_dis || ee.contact(2) - ee.pos(2) > max_down_dis) {
 				state = WAITING;
-				cout << "MOTION DOWN TO WAITING: STATE ["<< state << "]"  << endl;
 				if (ee.pos(2) - (ball.position(2) + z_ball_offset) > stop_down_dis){
-					cout << " Caused by: Ball is far enough. ee_z - ball_z + z_offset > "<< stop_down_dis << endl;
+					cout << " MOTION DOWN TO WAITING. POS: " << ee.pos(2) << " Desired: " << ee.pos_desired(2) << endl;
+					cout << " Caused by: Ball is far enough. " << endl << endl;
 				} else {
-					cout << " Caused by: EE moved enough in z. ee.contact_z - ee_z > " << ee.contact(2) << " " << ee.pos(2) << " < " << max_down_dis << endl;
+					cout << " MOTION DOWN TO WAITING POS: " << ee.pos(2) << " Desired: " << ee.pos_desired(2) << endl;
+					cout << " Caused by: EE moved enough in z" << endl << endl;
 				}
 				ee.lowest = ee.pos(2);
 				dribble_count += 1.0;
