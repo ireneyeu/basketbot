@@ -123,7 +123,7 @@ class EndEffector {
 
 	bool isValid() const {
 		return pos(0) >  0.35 && pos(0) < 0.8
-			&& pos(1) > -0.6  && pos(1) < 0.6 
+			&& pos(1) > -0.4  && pos(1) < 0.4 
 			&& pos(2) >  0.25  && pos(2) < 0.7;
 	}
 
@@ -225,7 +225,7 @@ int main() {
 	float x_ball_offset   = -0.22;     // offset in x for desired ee point
 	double z_ball_offset  = 0.15;      // offset in z for desired ee point
 	float wrist_up_deg    = 10.0;      // wrist up goal angle in degrees
-	float wrist_down_deg  = -15.0;     // wrist down goal angle in degrees
+	float wrist_down_deg  = -20.0;     // wrist down goal angle in degrees
 	float step_size       = 0.008;    // step size for "velocity" control
 	float step            = 0.008;    // initial step
 	float step_up_size    = 0.001;
@@ -234,11 +234,11 @@ int main() {
 	float ball_vel_down   = 0.01;      // velocity threshold considering the ball going down
 	float min_ball_apex   = 0.01;       // min ball apex height to consider dribbling
 	float clamp_z         = 0.05;      // min and max z position for ee during motion up
-	float start_down_dis  = 0.12;      // threshold for down motion
+	float start_down_dis  = 0.10;      // threshold for down motion
 	float stop_down_dis   = 0.18;      // threshold for stopping down motion
 	float max_down_dis    = 0.04;      // max distance for down motion
 	float prev_contact    = 0.5;
-	float waiting_offset  = start_down_dis*0.8;
+	float waiting_offset  = start_down_dis*1.0;
 	bool verbose          = false;
 	bool reached_up       = false;
 	bool driver_running   = true;
@@ -251,8 +251,8 @@ int main() {
 
 	// // Define Information
 	VectorXd q_desired(7);
-	// q_desired << 0.0, -0.1, 0.0, -2.0, 0.0, 1.9, -0.77; // sai::sensors::FrankaRobot::joint_positions
-	q_desired << 0.0, 0.05, 0.0, -2.0, 0.0, 2.2, -0.77; // sai::sensors::FrankaRobot::joint_positions
+	q_desired << 0.0, -0.1, 0.0, -2.0, 0.0, 1.9, -0.77; // sai::sensors::FrankaRobot::joint_positions
+	// q_desired << 0.0, 0.05, 0.0, -2.0, 0.0, 2.2, -0.77; // sai::sensors::FrankaRobot::joint_positions
 	//q_desired << 0.0, 0.27, 0.0, -2.0, 0.0, 2.3, -0.77; // sai::sensors::FrankaRobot::joint_positions
 	
 	// initial state 
