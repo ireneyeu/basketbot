@@ -6,7 +6,7 @@ import time
 BALL_POSITION_KEY = "sai::camera::BALL::sensors::position"
 BALL_VELOCITY_KEY = "sai::camera::BALL::sensors::velocity"
 BALL_APEX_KEY = "sai::sim::BALL::sensors::apex"
-BALL_POS_OPTITRACK = "sai2::optitrack::rigid_body_pos::6"
+BALL_POS_OPTITRACK = "sai2::optitrack::rigid_body_pos::7"
 
 redis_client = redis.Redis()
 

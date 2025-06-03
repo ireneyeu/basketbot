@@ -654,7 +654,7 @@ int main() {
 
 		} else if (state == TEST4) {
 			ee.pos_desired = ee.pos_init;
-			ee.trackXY(ball.position, x_ball_offset, tracking_y);
+			ee.trackXY(ball.position, x_ball_offset, tracking_x, tracking_y);
 			ee.pos_desired(2) = ball.position(2) + z_ball_offset;
 
 			pose_task->setGoalPosition(ee.pos_desired);
@@ -664,7 +664,7 @@ int main() {
 
 		} else if (state == TEST5) {
 			ee.pos_desired = ee.pos_init;
-			ee.trackBallWithAngles(ball.position, tracking_x_angle, tracking_y);
+			ee.trackBallWithAngles(ball.position, tracking_x_angle, tracking_y_angle);
 			
 			pose_task->setGoalPosition(ee.pos_desired);
 			pose_task->setGoalOrientation(ee.ori_desired);
