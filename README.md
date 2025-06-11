@@ -9,12 +9,16 @@ cd build
 cmake .. && make -j4
 
 Then you can run the files from bin folder:
-cd bin/basketbot
+cd basketbot/bin/basketbot
 
  ./basketbot-simviz
+ ./basketbot
 
- Added an initial script for the robot to move up and down like in the tutorial. First run ./basketbot-simviz and in another terminal the robot_arm_up_down.py file
-
+To run vision:
+Go to cd basketbot/optitrack/drivers/PythonClient and run
+Python StreamData.py
+Then, go to cd basketbot/computer_vision and run
+Python ball_tracker_optitrack.py
 
 Notes:
 Added a sphere and floor to the world.urdf and the simviz_config.xml files. "collisionRestitutionCoefficient" lets the ball bounce.
